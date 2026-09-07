@@ -1,0 +1,15 @@
+# cert-manager on the prod k3s VM. Chart jetstack/cert-manager v1.21.2 (the latest stable release
+# on api.github.com at the time of writing), release cert-manager, namespace cert-manager, from
+# https://charts.jetstack.io. Every key here exists in
+# `helm show values jetstack/cert-manager --version v1.21.2`.
+#
+# The ClusterIssuers are not part of this release; they are in issuers/, applied once the
+# controller and webhook are ready.
+
+crds:
+  # The chart owns the CRDs, so an upgrade of the chart upgrades them with it.
+  enabled: true
+  # Uninstalling the release must not delete the CRDs, because that would garbage-collect every
+  # Certificate and the account keys with them.
+  keep: true
+

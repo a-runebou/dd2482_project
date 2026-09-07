@@ -1,0 +1,14 @@
+# The credential .github/workflows/deploy-prod.yml uses to run deploy-prod.sh release. Not part of
+# any release and not applied by one: an admin applies it once, by hand, as step 5 of the
+# activation checklist in docs/deployment/runbook.md ("Automated deployment (prepared, not
+# active)"). Nothing here is cluster-scoped; the Namespace is owned by overlays/prod-data.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: schedular
+
+resources:
+  - serviceaccount.yaml
+  - role.yaml
+  - rolebinding.yaml
+  - token.yaml

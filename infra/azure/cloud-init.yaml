@@ -1,0 +1,49 @@
+#cloud-config
+# First boot of schedular-prod: patches the OS, hardens sshd and installs a pinned k3s.
+#
+# @@FQDN@@ is replaced by vm.bicep with the public IP's FQDN before this file becomes the VM's
+# customData, so the API server certificate is valid for the name the kubeconfig points at.
+# customData is applied once, at creation; editing this file does not change an existing VM.
+
+# Patch the VM at first boot. Ubuntu's default unattended-upgrades covers security updates after
+# that; it is deliberately not configured further.
+package_update: true
+package_upgrade: true
+
+write_files:
+  # The 00- prefix matters: sshd uses the first value it reads for a keyword, and the main
+  # sshd_config includes sshd_config.d/*.conf in lexical order before its own settings, so this
+  # file wins over 50-cloud-init.conf and anything the Azure agent writes.
+  - path: /etc/ssh/sshd_config.d/00-schedular-hardening.conf
+    owner: root:root
+    permissions: "0644"
+    content: |
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin no
+      AuthenticationMethods publickey
+      AllowUsers azureuser
+      AllowAgentForwarding no
+      X11Forwarding no
+  # Read by the k3s server on every start, so these settings survive restarts and upgrades.
+  - path: /etc/rancher/k3s/config.yaml
+    owner: root:root
+    permissions: "0600"
+    content: |
+      # Traefik is installed separately with Helm from infra/k8s/traefik/, pinned like the local
+      # rehearsal cluster, so the bundled copy would only collide with it.
+      disable:
+        - traefik
+      tls-san:
+        - "@@FQDN@@"
+      secrets-encryption: true
+
+runcmd:
+  # Ubuntu 24.04 socket-activates ssh, and a running sshd reads its configuration only when it
+  # starts. Restart ssh.service explicitly, after validating the files, so the hardening applies
+  # to an sshd that may already be up. The unit is ssh.service, not sshd.service. /run/sshd is
+  # created because sshd -t needs it and, under socket activation, ssh.service may not have run
+  # yet. If validation fails the restart is skipped and the log shows the error; runcmd carries on.
+  - [sh, -c, "mkdir -p /run/sshd && sshd -t && systemctl restart ssh.service"]
+  # The install script verifies the downloaded binary against the release's checksums.
+  - [sh, -c, "curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='v1.37.1+k3s1' sh -"]

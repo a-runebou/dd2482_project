@@ -1,0 +1,17 @@
+# Production, first of three: data, migration, application. Owns the Namespace and the database.
+# Applied by hand, once, and never by deploy-prod.sh (docs/deployment/runbook.md).
+#
+# The PVC uses the cluster's default StorageClass, local-path on k3s: the data sits on the VM's OS
+# disk and lives exactly as long as the VM and the Namespace do.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: schedular
+
+resources:
+  - namespace.yaml
+  - ../../postgres
+
+# There is deliberately no Secret here. `postgres-credentials` is derived from `schedular-secrets`
+# exactly as in overlays/local-data; the commands, with the namespace `schedular`, are in
+# docs/deployment/runbook.md.

@@ -1,0 +1,97 @@
+# The SPA bundle on nginx. Behind the Ingress, /api is split off before it reaches this pod, but
+# the image still proxies /api to the backend (F15), which keeps it usable on its own, for example
+# through a port-forward. Either way there is one origin and no CORS (ARCHITECTURE section 10,
+# coordination C1/C9).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+spec:
+  replicas: 1
+
+  # Serves traffic, same reasoning as the backend.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: schedular
+      app.kubernetes.io/component: frontend
+
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: schedular
+        app.kubernetes.io/component: frontend
+
+    spec:
+      # The image is nginxinc/nginx-unprivileged, which already runs as a non-root user on an
+      # unprivileged port, so no UID is pinned here; this only asserts what the image does.
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: frontend
+          image: schedular-frontend:dev
+
+          ports:
+            - name: http
+              containerPort: 8080
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            # The nginx entrypoint renders /etc/nginx/conf.d from the template at start-up and
+            # needs a writable /tmp, so this cannot be true without adding volumes. Follow-up.
+            readOnlyRootFilesystem: false
+
+          # Plain literals, not configuration: both are properties of how this image is wired to
+          # its sibling Service, not environment-specific settings.
+          env:
+            # Matches the backend Service name and port below. Not headless, because nginx
+            # resolves this once at start-up and caches the result.
+            - name: BACKEND_ORIGIN
+              value: http://backend:8000
+            # The image's entrypoint runs envsubst over default.conf.template. Without a filter
+            # it substitutes every variable present in the environment, which would blank nginx's
+            # own $host, $scheme, $uri and $proxy_add_x_forwarded_for if anything ever injected
+            # variables of those names into the pod. This restricts it to the one name we mean.
+            - name: NGINX_ENVSUBST_FILTER
+              value: BACKEND_ORIGIN
+
+          # nginx answers /healthz itself with a literal 200 and never touches the backend, so
+          # neither probe can be tripped by a backend outage. Start-up is a few hundred
+          # milliseconds, hence the short delays.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+
+          # Serving static files out of page cache; it needs very little.
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi

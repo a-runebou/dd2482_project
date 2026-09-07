@@ -1,0 +1,49 @@
+# Traefik on the prod k3s VM. Passed after values.yaml. Every key here exists in
+# `helm show values traefik/traefik --version 41.6.0`.
+
+# k3s's ServiceLB answers a LoadBalancer Service by binding its ports on the node itself, so web
+# and websecure listen on the VM's ports 80 and 443, which are the only two the NSG opens besides
+# SSH (infra/azure/README.md).
+service:
+  spec:
+    type: LoadBalancer
+
+ports:
+  web:
+    exposedPort: 80
+    # Every plain-HTTP request is answered with a permanent redirect to HTTPS. cert-manager's
+    # HTTP-01 challenge is redirected too; Let's Encrypt follows a redirect to port 443 and does
+    # not validate the certificate it meets there, so issuance still works.
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+    # Clients reach Traefik directly, with no proxy in front, so no X-Forwarded-* they send is
+    # believed.
+    forwardedHeaders:
+      trustedIPs: []
+      insecure: false
+  websecure:
+    exposedPort: 443
+    # TLS is on for the whole entrypoint; certificates come from the Ingress tls section, which
+    # cert-manager fills.
+    http:
+      tls:
+        enabled: true
+    forwardedHeaders:
+      trustedIPs: []
+      insecure: false
+  # The traefik entrypoint serves the dashboard and API; it stays inside the pod.
+  traefik:
+    expose:
+      default: false
+  metrics:
+    expose:
+      default: false
+
+# No route to the dashboard. It remains reachable only by a port-forward to the pod.
+ingressRoute:
+  dashboard:
+    enabled: false

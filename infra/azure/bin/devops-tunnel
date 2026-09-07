@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Manage the SSH tunnel to the prod k3s API: local port -> VM 127.0.0.1:6443.
+# The tunnel is an SSH control master, so it can be inspected and closed without pid files.
+# See README.md, "Operating the prod cluster".
+set -euo pipefail
+
+HOST="${SCHEDULAR_PROD_HOST:-schedular.polandcentral.cloudapp.azure.com}"
+PORT="${SCHEDULAR_PROD_TUNNEL_PORT:-16443}"
+# The port is in the name so that two tunnels on different ports cannot share a socket.
+SOCKET="$HOME/.ssh/schedular-prod-tunnel-${PORT}.sock"
+TARGET="azureuser@${HOST}"
+
+usage() {
+  echo "usage: ${0##*/} start|stop|status" >&2
+  exit 2
+}
+
+is_up() {
+  [[ -S "$SOCKET" ]] && ssh -S "$SOCKET" -O check "$TARGET" >/dev/null 2>&1
+}
+
+[[ $# -eq 1 ]] || usage
+
+case "$1" in
+  start)
+    if is_up; then
+      echo "tunnel already up on 127.0.0.1:${PORT}" >&2
+      exit 0
+    fi
+    # A socket left by a crashed master would make ssh refuse to bind a new one.
+    rm -f "$SOCKET"
+    if ! ssh -f -N -M -S "$SOCKET" \
+      -o ExitOnForwardFailure=yes \
+      -o ConnectTimeout=15 \
+      -o ServerAliveInterval=30 \
+      -L "${PORT}:127.0.0.1:6443" "$TARGET"; then
+      echo "error: could not open the tunnel to ${HOST}." >&2
+      echo "Is the VM running (infra/azure/vm.sh status), and is port ${PORT} free?" >&2
+      exit 1
+    fi
+    echo "tunnel up on 127.0.0.1:${PORT}" >&2
+    ;;
+  stop)
+    if ! is_up; then
+      echo "tunnel is not up" >&2
+      exit 0
+    fi
+    ssh -S "$SOCKET" -O exit "$TARGET" >/dev/null 2>&1
+    echo "tunnel closed" >&2
+    ;;
+  status)
+    if is_up; then
+      echo "tunnel up on 127.0.0.1:${PORT}"
+    else
+      echo "tunnel down"
+      exit 1
+    fi
+    ;;
+  *)
+    usage
+    ;;
+esac

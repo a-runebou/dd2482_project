@@ -1,0 +1,12 @@
+# The schema migration, kept apart from base/ so that applying the application can never start
+# it, and applying it can never start the application. See overlays/local-migrate.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - job.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/part-of: schedular

@@ -1,0 +1,21 @@
+# Let's Encrypt staging: untrusted certificates, generous rate limits. Used first, to prove the
+# HTTP-01 path end to end before production is asked for anything.
+#
+# No email: Let's Encrypt no longer sends expiry mail, and an address would only identify the
+# account. cert-manager renews on its own.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    # The ACME account key cert-manager generates and keeps, in the cert-manager namespace.
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+      # The solver's temporary Ingress uses the same class as the application's, so Traefik
+      # serves /.well-known/acme-challenge/ on the same entrypoints.
+      - http01:
+          ingress:
+            ingressClassName: traefik

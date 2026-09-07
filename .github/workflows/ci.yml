@@ -1,0 +1,60 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "contracts/**"
+      - "infra/compose/**"
+      - ".github/workflows/**"
+
+  pull_request:
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "contracts/**"
+      - "infra/compose/**"
+      - ".github/workflows/**"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  backend:
+    uses: ./.github/workflows/backend-ci.yml
+
+  frontend:
+    uses: ./.github/workflows/frontend-ci.yml
+
+  security:
+    uses: ./.github/workflows/security.yml
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      security-events: write
+
+  build:
+    needs: [backend, frontend, security]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    uses: ./.github/workflows/build-images.yml
+    permissions:
+      contents: read
+      packages: write
+
+  deploy:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    uses: ./.github/workflows/deploy-dev.yml
+    with:
+      image_tag: ${{ needs.build.outputs.image_tag }}
+

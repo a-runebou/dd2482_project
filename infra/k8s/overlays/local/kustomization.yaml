@@ -1,0 +1,57 @@
+# Local rehearsal of production on a single-node kind cluster. Images are bare names with no registry prefix
+# because they are built with docker and side-loaded with `kind load`; nothing is pulled.
+#
+# Third of three: data, migration, application. Apply only after overlays/local-migrate has
+# completed. The Namespace is owned by overlays/local-data, not by this overlay.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: schedular-local
+
+resources:
+  - ../../base
+  - ../../mailpit
+
+# The base Ingress has no host. `.localhost` resolves to loopback in browsers and curl without a
+# hosts entry, and the kind config maps host port 80 on 127.0.0.1 to Traefik's NodePort.
+patches:
+  - target:
+      group: networking.k8s.io
+      version: v1
+      kind: Ingress
+      name: schedular
+    patch: |-
+      - op: add
+        path: /spec/rules/0/host
+        value: schedular.localhost
+
+# Non-secret settings, matching infra/compose/.env.example so that the compose stack and the
+# cluster behave the same, except PUBLIC_APP_URL, which is the host the Ingress answers on rather
+# than the compose publish port. AUTH_COOKIE_SECURE stays false because the local entrypoint is
+# plain HTTP; a Secure cookie would never be sent back.
+#
+# The generated name carries a content hash and the references in the Deployments are rewritten
+# to match, so editing a value here rolls the pods instead of leaving them on stale config.
+configMapGenerator:
+  - name: schedular-config
+    literals:
+      - ENVIRONMENT=development
+      - PUBLIC_APP_URL=http://schedular.localhost
+      - AUTH_COOKIE_SECURE=false
+      - SMTP_HOST=mailpit
+      - SMTP_PORT=1025
+      - SMTP_FROM=schedular@example.local
+      - OPS_ALERT_EMAIL=
+      - BUILD_SHA=dev
+
+# There is deliberately no Secret here. `schedular-secrets` is created out of band and never
+# committed:
+#
+#   kubectl -n schedular-local create secret generic schedular-secrets \
+#     --from-literal=DATABASE_URL=... \
+#     --from-literal=JWT_SECRET=... \
+#     --from-literal=SMTP_USERNAME=... \
+#     --from-literal=SMTP_PASSWORD=...
+#
+# All four keys must exist. A missing one stops the backend and worker containers from being
+# created, which is the intended behaviour: see backend-deployment.yaml.

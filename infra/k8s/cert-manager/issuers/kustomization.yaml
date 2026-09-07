@@ -1,0 +1,14 @@
+# The two ACME ClusterIssuers, applied once after the cert-manager release is ready
+# (docs/deployment/runbook.md). Cluster-scoped, so no namespace. The prod Ingress names one of them
+# in its cert-manager.io/cluster-issuer annotation.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - letsencrypt-staging.yaml
+  - letsencrypt-prod.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/part-of: schedular

@@ -1,0 +1,26 @@
+# First of three: data, migration, application. Owns the Namespace and the database, which are
+# applied once and outlive every application rollout.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: schedular-local
+
+resources:
+  - namespace.yaml
+  - ../../postgres
+
+# There is deliberately no Secret here. `postgres-credentials` is created out of band, with the
+# password taken from schedular-secrets so the two can never disagree:
+#
+#   PGPW="$(kubectl -n schedular-local get secret schedular-secrets -o jsonpath='{.data.DATABASE_URL}' | base64 -d | sed -E 's#^[^:]+://[^:]+:([^@]*)@.*#\1#')"
+#   kubectl -n schedular-local create secret generic postgres-credentials \
+#     --from-literal=POSTGRES_USER=schedular \
+#     --from-literal=POSTGRES_DB=schedular \
+#     --from-literal=POSTGRES_PASSWORD="$PGPW"
+#   unset PGPW
+#
+# This extracts the password as it appears in the URL, i.e. percent-encoded, so it is only
+# correct for a password containing no character that needs percent-encoding.
+#
+# On a fresh cluster the Namespace does not exist yet: apply this overlay first, then create the
+# Secret; the Postgres pod waits in CreateContainerConfigError until it exists.

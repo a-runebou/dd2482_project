@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Run kubectl against the prod k3s cluster through the managed SSH tunnel. Arguments pass through
+# unchanged. The prod kubeconfig is given with --kubeconfig only: no environment variable is
+# set, no kubeconfig file is modified and no current context is changed, so a plain `kubectl`
+# keeps talking to the local kind cluster. See README.md, "Operating the prod cluster".
+set -euo pipefail
+
+KUBECONFIG_FILE="${SCHEDULAR_PROD_KUBECONFIG:-$HOME/.kube/schedular-prod.yaml}"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if ! command -v kubectl >/dev/null 2>&1; then
+  echo "error: kubectl is not installed or not on PATH." >&2
+  exit 1
+fi
+
+if [[ ! -f "$KUBECONFIG_FILE" ]]; then
+  echo "error: prod kubeconfig not found at $KUBECONFIG_FILE." >&2
+  echo "Fetch it as described in infra/azure/README.md, \"API tunnel and kubeconfig\"," >&2
+  echo "or point SCHEDULAR_PROD_KUBECONFIG at it." >&2
+  exit 1
+fi
+
+if ! "$HERE/devops-tunnel" status >/dev/null 2>&1; then
+  "$HERE/devops-tunnel" start >&2 || {
+    echo "error: the tunnel is down and could not be opened; not running kubectl." >&2
+    exit 1
+  }
+fi
+
+exec kubectl --kubeconfig "$KUBECONFIG_FILE" "$@"

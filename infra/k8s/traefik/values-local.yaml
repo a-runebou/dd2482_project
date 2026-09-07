@@ -1,0 +1,33 @@
+# Traefik on the kind rehearsal cluster. Passed after values.yaml. Every key here exists in
+# `helm show values traefik/traefik --version 41.6.0`.
+
+# kind has no load balancer. The node's port 30080 is mapped to 127.0.0.1:80 on the host by
+# kind/cluster.yaml.
+service:
+  spec:
+    type: NodePort
+
+ports:
+  # The only exposed entrypoint: plain HTTP.
+  web:
+    nodePort: 30080
+    # Nothing sits in front of Traefik locally, so no client may set X-Forwarded-* for it.
+    forwardedHeaders:
+      trustedIPs: []
+      insecure: false
+  # No TLS locally, so no HTTPS entrypoint on the Service.
+  websecure:
+    expose:
+      default: false
+  # The traefik entrypoint serves the dashboard and API; it stays inside the pod.
+  traefik:
+    expose:
+      default: false
+  metrics:
+    expose:
+      default: false
+
+# No route to the dashboard. It remains reachable only by a port-forward to the pod.
+ingressRoute:
+  dashboard:
+    enabled: false

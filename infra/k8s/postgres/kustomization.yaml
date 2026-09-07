@@ -1,0 +1,14 @@
+# The database, kept apart from base/ because its lifecycle is: it is applied once and outlives
+# every application rollout. No namespace and no Secret here; see overlays/local-data.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - statefulset.yaml
+  - service.yaml
+
+# Same convention as base/: non-selector labels only.
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/part-of: schedular

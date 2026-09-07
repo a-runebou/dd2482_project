@@ -1,0 +1,44 @@
+server {
+    listen 8080;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    gzip on;
+    gzip_min_length 256;
+    gzip_types text/plain text/css application/javascript application/json image/svg+xml;
+
+    # Kubernetes probes hit this directly; it must never depend on the backend.
+    location = /healthz {
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    # proxy_pass carries the "/api/" URI so the "/api/" location prefix is replaced by itself,
+    # leaving the rest of the request path unchanged (e.g. /api/v1/config stays /api/v1/config).
+    location /api/ {
+        proxy_pass ${BACKEND_ORIGIN}/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    # Never cache the shell, so a redeploy is visible on the next load.
+    location = /index.html {
+        add_header Cache-Control "no-cache";
+    }
+
+    # Hashed build assets are safe to cache for a long time.
+    location ~* \.(?:js|css|svg|png|jpg|jpeg|gif|ico|webp|woff2?)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # Client-side routes (e.g. /groups/new) are served the SPA shell on a hard reload.
+    location / {
+        try_files $uri /index.html;
+    }
+}

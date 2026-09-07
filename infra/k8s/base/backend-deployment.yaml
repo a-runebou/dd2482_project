@@ -1,0 +1,164 @@
+# The HTTP API. One replica; it is stateless, so replicas are a cluster-size decision, not a
+# correctness one.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+spec:
+  replicas: 1
+
+  # Serves traffic, so never drop below the current capacity during a rollout: bring the new pod
+  # up and wait for it to pass /readyz before the old one goes away.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+
+  # Written out literally rather than produced by a transformer: a selector is immutable after
+  # creation, so a transformer writing into it would make any future label change require
+  # deleting the Deployment.
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: schedular
+      app.kubernetes.io/component: backend
+
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: schedular
+        app.kubernetes.io/component: backend
+
+    spec:
+      # backend/Dockerfile declares no USER, so the image would otherwise run as root. Pinned
+      # here rather than by editing another workstream's Dockerfile.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: backend
+          image: schedular-backend:dev
+
+          command:
+            - uvicorn
+            - app.main:app
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8000"
+
+          ports:
+            - name: http
+              containerPort: 8000
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            # Follow-up: the image writes to its own filesystem at start-up, so this stays false
+            # until that is confirmed unnecessary.
+            readOnlyRootFilesystem: false
+
+          # app/config.py supplies a default for every setting, including JWT_SECRET, whose
+          # default is a literal published in this repository. Each secret is therefore named
+          # individually with no `optional: true`: a missing or misnamed key then stops the
+          # container from being created instead of silently signing tokens with a known value.
+          # envFrom would defeat exactly this.
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: schedular-secrets
+                  key: DATABASE_URL
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: schedular-secrets
+                  key: JWT_SECRET
+            - name: SMTP_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: schedular-secrets
+                  key: SMTP_USERNAME
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: schedular-secrets
+                  key: SMTP_PASSWORD
+
+            - name: ENVIRONMENT
+              valueFrom:
+                configMapKeyRef:
+                  name: schedular-config
+                  key: ENVIRONMENT
+            - name: PUBLIC_APP_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: schedular-config
+                  key: PUBLIC_APP_URL
+            - name: AUTH_COOKIE_SECURE
+              valueFrom:
+                configMapKeyRef:
+                  name: schedular-config
+                  key: AUTH_COOKIE_SECURE
+            - name: SMTP_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: schedular-config
+                  key: SMTP_HOST
+            - name: SMTP_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: schedular-config
+                  key: SMTP_PORT
+            - name: SMTP_FROM
+              valueFrom:
+                configMapKeyRef:
+                  name: schedular-config
+                  key: SMTP_FROM
+            - name: OPS_ALERT_EMAIL
+              valueFrom:
+                configMapKeyRef:
+                  name: schedular-config
+                  key: OPS_ALERT_EMAIL
+            - name: BUILD_SHA
+              valueFrom:
+                configMapKeyRef:
+                  name: schedular-config
+                  key: BUILD_SHA
+
+          # ARCHITECTURE section 9: /healthz stays 200 while the database circuit breaker is
+          # open, because the process is alive and must not be restarted. Liveness therefore
+          # points here and never at /readyz.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+
+          # /readyz returns 503 while the breaker is open, so the pod leaves rotation without
+          # being killed. Polled more often than liveness so recovery is noticed quickly.
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

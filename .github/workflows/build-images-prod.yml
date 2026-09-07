@@ -1,0 +1,146 @@
+name: build-images-prod
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore: ['docs/**', '**/*.md']
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-images-prod-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # workflow_dispatch can be started from any branch; only main may publish.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Normalise image names
+        id: image
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          repository="${REPOSITORY,,}"
+          echo "backend=ghcr.io/${repository}-backend:main-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          echo "frontend=ghcr.io/${repository}-frontend:main-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Images are loaded into the local daemon, scanned, and only then pushed,
+      # so the bytes that were scanned are the bytes that are published.
+      - name: Build backend image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: ${{ steps.image.outputs.backend }}
+          cache-from: type=gha,scope=prod-backend
+          cache-to: type=gha,mode=max,scope=prod-backend
+
+      - name: Build frontend image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: ${{ steps.image.outputs.frontend }}
+          cache-from: type=gha,scope=prod-frontend
+          cache-to: type=gha,mode=max,scope=prod-frontend
+
+      # Report step: HIGH and CRITICAL, fixed or not, never fails the job.
+      - name: Scan backend image (report)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.image.outputs.backend }}
+          format: table
+          output: trivy-backend.txt
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+
+      - name: Scan frontend image (report)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.image.outputs.frontend }}
+          format: table
+          output: trivy-frontend.txt
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+
+      - name: Add scan results to job summary
+        if: always()
+        run: |
+          {
+            echo "## Trivy scan results"
+            for name in backend frontend; do
+              echo "### ${name}"
+              echo '```'
+              cat "trivy-${name}.txt" 2>/dev/null || echo "No scan output."
+              echo '```'
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Gate step: CRITICAL with an available fix fails the job before any push.
+      - name: Scan backend image (gate)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.image.outputs.backend }}
+          format: table
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Scan frontend image (gate)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.image.outputs.frontend }}
+          format: table
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Push images
+        env:
+          BACKEND_IMAGE: ${{ steps.image.outputs.backend }}
+          FRONTEND_IMAGE: ${{ steps.image.outputs.frontend }}
+        run: |
+          docker push "$BACKEND_IMAGE"
+          docker push "$FRONTEND_IMAGE"
+
+      - name: Add pushed images to job summary
+        env:
+          BACKEND_IMAGE: ${{ steps.image.outputs.backend }}
+          FRONTEND_IMAGE: ${{ steps.image.outputs.frontend }}
+        run: |
+          {
+            echo "## Published images (linux/amd64)"
+            echo "- \`${BACKEND_IMAGE}\`"
+            echo "- \`${FRONTEND_IMAGE}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

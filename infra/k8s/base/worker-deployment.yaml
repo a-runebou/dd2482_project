@@ -1,0 +1,124 @@
+# The background job loop: ICS polling, reminder scheduling, outbound mail. Same image as the
+# backend with a different entrypoint (ARCHITECTURE section 4). It serves no HTTP, so it has no
+# Service, no ports and no probes.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+spec:
+  replicas: 1
+
+  # Nothing routes to the worker, so there is no rotation to preserve and no reason to run two
+  # job loops side by side mid-rollout. Recreate stops the old loop before starting the new one.
+  strategy:
+    type: Recreate
+
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: schedular
+      app.kubernetes.io/component: worker
+
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: schedular
+        app.kubernetes.io/component: worker
+
+    spec:
+      # Same image as the backend, so the same missing USER, so the same fix.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: worker
+          image: schedular-backend:dev
+
+          command:
+            - python
+            - -m
+            - app.worker.main
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: false
+
+          # Identical to the backend's environment, deliberately: the two share the same code
+          # and the same settings object. See the comment in backend-deployment.yaml for why the
+          # four secrets are named individually and are not optional.
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: schedular-secrets
+                  key: DATABASE_URL
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: schedular-secrets
+                  key: JWT_SECRET
+            - name: SMTP_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: schedular-secrets
+                  key: SMTP_USERNAME
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: schedular-secrets
+                  key: SMTP_PASSWORD
+
+            - name: ENVIRONMENT
+              valueFrom:
+                configMapKeyRef:
+                  name: schedular-config
+                  key: ENVIRONMENT
+            - name: PUBLIC_APP_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: schedular-config
+                  key: PUBLIC_APP_URL
+            - name: AUTH_COOKIE_SECURE
+              valueFrom:
+                configMapKeyRef:
+                  name: schedular-config
+                  key: AUTH_COOKIE_SECURE
+            - name: SMTP_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: schedular-config
+                  key: SMTP_HOST
+            - name: SMTP_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: schedular-config
+                  key: SMTP_PORT
+            - name: SMTP_FROM
+              valueFrom:
+                configMapKeyRef:
+                  name: schedular-config
+                  key: SMTP_FROM
+            - name: OPS_ALERT_EMAIL
+              valueFrom:
+                configMapKeyRef:
+                  name: schedular-config
+                  key: OPS_ALERT_EMAIL
+            - name: BUILD_SHA
+              valueFrom:
+                configMapKeyRef:
+                  name: schedular-config
+                  key: BUILD_SHA
+
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi

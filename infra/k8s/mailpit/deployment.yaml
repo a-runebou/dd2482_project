@@ -1,0 +1,86 @@
+# Mailpit: SMTP on 1025, web UI on 8025. One replica, no persistence; a restart empties the inbox,
+# which is acceptable for a sink nobody outside the team reads.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailpit
+spec:
+  replicas: 1
+
+  # Two sinks side by side would split the inbox between them for the length of a rollout.
+  strategy:
+    type: Recreate
+
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: schedular
+      app.kubernetes.io/component: mailpit
+
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: schedular
+        app.kubernetes.io/component: mailpit
+
+    spec:
+      # The image's Dockerfile declares no USER, so it would run as root. Both ports are above
+      # 1024 and the message store is a temporary file under /tmp, so any UID works.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Nothing in the pod talks to the API server.
+      automountServiceAccountToken: false
+
+      containers:
+        - name: mailpit
+          # Pinned to the same tag as infra/compose/docker-compose.deploy.yml, the dev deployment,
+          # so the dev and cluster sinks behave alike. docker-compose.dev.yml uses latest.
+          image: axllent/mailpit:v1.27.8
+
+          ports:
+            - name: smtp
+              containerPort: 1025
+            - name: http
+              containerPort: 8025
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            # Mailpit writes its database to the OS temporary directory; left writable until a
+            # read-only root with an emptyDir on /tmp has been tried on a real cluster.
+            readOnlyRootFilesystem: false
+
+          # The image's own health command, as the compose healthcheck uses. An exec probe runs
+          # inside the container, so it is unaffected by the NetworkPolicy that shuts 8025.
+          readinessProbe:
+            exec:
+              command:
+                - /mailpit
+                - readyz
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          livenessProbe:
+            exec:
+              command:
+                - /mailpit
+                - readyz
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi

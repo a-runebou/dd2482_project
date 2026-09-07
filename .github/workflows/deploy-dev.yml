@@ -1,0 +1,298 @@
+name: deploy-dev
+
+on:
+  workflow_call:
+    inputs:
+      image_tag:
+        description: "Docker image tag to deploy"
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Docker image tag to deploy"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Validate deployment branch and image tag
+        env:
+          DEPLOY_REF: ${{ github.ref }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          case "$DEPLOY_REF" in
+            refs/heads/develop)
+              ;;
+            *)
+              echo "Deployment branch is not trusted: $DEPLOY_REF"
+              exit 1
+              ;;
+          esac
+
+          if [[ ! "$IMAGE_TAG" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "image_tag must be a 40-character Git commit SHA"
+            exit 1
+          fi
+
+      - name: Checkout trusted branch history
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Verify image commit provenance
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          TRUSTED_BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          git fetch --no-tags origin \
+            "refs/heads/$TRUSTED_BRANCH:refs/remotes/origin/$TRUSTED_BRANCH"
+
+          if ! git cat-file -e "$IMAGE_TAG^{commit}"; then
+            echo "Image commit does not exist: $IMAGE_TAG"
+            exit 1
+          fi
+
+          if ! git merge-base --is-ancestor \
+            "$IMAGE_TAG" \
+            "refs/remotes/origin/$TRUSTED_BRANCH"; then
+            echo "Image commit is not an ancestor of trusted branch $TRUSTED_BRANCH: $IMAGE_TAG"
+            exit 1
+          fi
+
+  deploy:
+    needs: validate
+    if: github.ref == 'refs/heads/develop'
+    environment: development
+    runs-on:
+      - self-hosted
+      - Linux
+      - ARM64
+      - dev-deployment
+
+    timeout-minutes: 10
+
+    steps:
+      - name: Validate image tag
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          if [[ ! "$IMAGE_TAG" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "image_tag must be a 40-character Git commit SHA"
+            exit 1
+          fi
+
+      - name: Checkout deployed commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.image_tag }}
+          fetch-depth: 1
+
+      - name: Read last known good deployment
+        id: known_good
+        run: |
+          state_file="$HOME/.config/schedular/last-known-good-image-tag"
+          if [[ ! -s "$state_file" ]]; then
+            echo "No last-known-good deployment recorded at $state_file"
+            echo "Seed this file with a known-good image tag before the first deployment"
+            exit 1
+          fi
+
+          image_tag=$(tr -d '[:space:]' < "$state_file")
+          if [[ ! "$image_tag" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "Invalid last-known-good image tag in $state_file"
+            exit 1
+          fi
+
+          echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
+          echo "Last known-good image tag: $image_tag"
+
+      - name: Pull deployment images
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          docker compose \
+            --env-file "$HOME/.config/schedular/.env.deploy" \
+            -f infra/compose/docker-compose.deploy.yml \
+            pull
+
+      - name: Start migration dependencies
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          docker compose \
+            --env-file "$HOME/.config/schedular/.env.deploy" \
+            -f infra/compose/docker-compose.deploy.yml \
+            up -d postgres mailpit
+
+      - name: Preflight migration 
+        env:
+          CANDIDATE_IMAGE_TAG: ${{ inputs.image_tag }}
+          LAST_KNOWN_GOOD_IMAGE_TAG: ${{ steps.known_good.outputs.image_tag }}
+        run: |
+          compose() {
+            docker compose \
+              --env-file "$HOME/.config/schedular/.env.deploy" \
+              -f infra/compose/docker-compose.deploy.yml \
+              "$@"
+          }
+
+          echo "Checking that the last-known-good image understands the current database revision"
+          if ! IMAGE_TAG="$LAST_KNOWN_GOOD_IMAGE_TAG" compose pull migrate; then
+            echo "Migration preflight check failed: could not pull the last-known-good image"
+            exit 1
+          fi
+          if ! IMAGE_TAG="$LAST_KNOWN_GOOD_IMAGE_TAG" compose run --rm --no-deps migrate alembic current; then
+            echo "Migration preflight check failed: the last-known-good image cannot read the current database revision"
+            exit 1
+          fi
+
+          echo "Rendering candidate migrations without applying them"
+          if ! IMAGE_TAG="$CANDIDATE_IMAGE_TAG" compose run --rm --no-deps migrate alembic upgrade head --sql > migration-preflight.sql; then
+            echo "Migration preflight failed: candidate migrations could not be rendered"
+            exit 1
+          fi
+          echo "Migration preflight passed; no migration was applied by this check"
+          rm -f migration-preflight.sql
+
+      - name: Deploy
+        id: deploy
+        continue-on-error: true
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          if ! docker compose \
+            --env-file "$HOME/.config/schedular/.env.deploy" \
+            -f infra/compose/docker-compose.deploy.yml \
+            up -d --wait --wait-timeout 300; then
+            echo "Deployment migration or service startup failed"
+            exit 1
+          fi
+          echo "Deployment migration and service startup completed"
+
+      - name: Show deployment status
+        if: always()
+        continue-on-error: true
+        env:
+            IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+            docker compose \
+            --env-file "$HOME/.config/schedular/.env.deploy" \
+            -f infra/compose/docker-compose.deploy.yml \
+            ps -a
+
+      - name: Check backend readiness
+        if: steps.deploy.outcome == 'success'
+        id: readiness
+        continue-on-error: true
+        run: |
+          compose() {
+            docker compose \
+              --env-file "$HOME/.config/schedular/.env.deploy" \
+              -f infra/compose/docker-compose.deploy.yml \
+              "$@"
+          }
+
+          for attempt in {1..12}; do
+            echo "Readiness check $attempt/12: checking backend /readyz"
+            if compose exec -T backend python -c \
+              'import urllib.request; response = urllib.request.urlopen("http://127.0.0.1:8000/readyz", timeout=3); print(response.status); raise SystemExit(response.status != 200)'; then
+              echo "Backend /readyz is healthy"
+              exit 0
+            fi
+
+            echo "Backend is not ready; waiting 5 seconds"
+            sleep 5
+          done
+
+          echo "Circuit breaker activated: backend did not become ready within 60 seconds"
+          exit 1
+
+      - name: Record successful deployment
+        if: steps.deploy.outcome == 'success' && steps.readiness.outcome == 'success'
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          state_dir="$HOME/.config/schedular"
+          state_file="$state_dir/last-known-good-image-tag"
+          mkdir -p "$state_dir"
+          printf '%s\n' "$IMAGE_TAG" > "$state_file.tmp"
+          mv "$state_file.tmp" "$state_file"
+          echo "Recorded last-known-good image tag: $IMAGE_TAG"
+
+      - name: Restart last known-good deployment
+        if: always() && (steps.deploy.outcome == 'failure' || steps.readiness.outcome == 'failure')
+        id: rollback_deploy
+        continue-on-error: true
+        env:
+          IMAGE_TAG: ${{ steps.known_good.outputs.image_tag }}
+        run: |
+          echo "Circuit breaker rollback: restoring image tag $IMAGE_TAG"
+          docker compose \
+            --env-file "$HOME/.config/schedular/.env.deploy" \
+            -f infra/compose/docker-compose.deploy.yml \
+            pull
+          docker compose \
+            --env-file "$HOME/.config/schedular/.env.deploy" \
+            -f infra/compose/docker-compose.deploy.yml \
+            up -d --wait --wait-timeout 300
+          docker compose \
+            --env-file "$HOME/.config/schedular/.env.deploy" \
+            -f infra/compose/docker-compose.deploy.yml \
+            ps -a
+          echo "Rollback restart completed"
+
+      - name: Check rollback readiness
+        if: always() && steps.rollback_deploy.outcome == 'success'
+        id: rollback_readiness
+        continue-on-error: true
+        run: |
+          compose() {
+            docker compose \
+              --env-file "$HOME/.config/schedular/.env.deploy" \
+              -f infra/compose/docker-compose.deploy.yml \
+              "$@"
+          }
+
+          for attempt in {1..12}; do
+            echo "Rollback readiness check $attempt/12: checking backend /readyz"
+            if compose exec -T backend python -c \
+              'import urllib.request; response = urllib.request.urlopen("http://127.0.0.1:8000/readyz", timeout=3); print(response.status); raise SystemExit(response.status != 200)'; then
+              echo "Rollback /readyz is healthy"
+              exit 0
+            fi
+
+            echo "Rollback backend is not ready; waiting 5 seconds"
+            sleep 5
+          done
+
+          echo "Rollback readiness check failed after 60 seconds"
+          exit 1
+
+      - name: Report deployment and rollback outcome
+        if: always() && (steps.deploy.outcome == 'failure' || steps.readiness.outcome == 'failure')
+        env:
+          ROLLBACK_DEPLOY_OUTCOME: ${{ steps.rollback_deploy.outcome }}
+          ROLLBACK_READINESS_OUTCOME: ${{ steps.rollback_readiness.outcome }}
+        run: |
+          if [[ "$ROLLBACK_DEPLOY_OUTCOME" == "success" && "$ROLLBACK_READINESS_OUTCOME" == "success" ]]; then
+            echo "Deployment failed but rollback succeeded"
+          else
+            echo "Deployment failed and rollback also failed"
+          fi
+
+          exit 1

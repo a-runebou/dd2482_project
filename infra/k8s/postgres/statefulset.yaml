@@ -1,0 +1,119 @@
+# The single PostgreSQL instance: persistence and job queue (ARCHITECTURE section 4). One
+# replica; there is no replication and nothing here would make a second one correct.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  replicas: 1
+
+  # The ClusterIP Service of the same name. Per-pod DNS is not needed with one replica, so no
+  # separate headless Service exists.
+  serviceName: postgres
+
+  # Written out literally for the same reason as the Deployments in base/: selectors are
+  # immutable after creation.
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: schedular
+      app.kubernetes.io/component: postgres
+
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: schedular
+        app.kubernetes.io/component: postgres
+
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+
+          ports:
+            - name: postgres
+              containerPort: 5432
+
+          # Named individually and not optional, as in base/backend-deployment.yaml: a missing
+          # key must stop the container rather than let the image initialise a cluster with
+          # whatever it defaults to.
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_DB
+            # initdb refuses a non-empty directory, and a fresh volume can carry a lost+found at
+            # its root, so the cluster lives one level below the mount.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+
+          # First start runs initdb and later starts may replay WAL, both of unpredictable length.
+          # The startup probe absorbs that (up to 150 s) and holds off the other two until it
+          # passes, so liveness and readiness need no initialDelaySeconds and liveness can stay
+          # strict without killing a database that is still initialising.
+          #
+          # pg_isready runs through sh so that user and database come from the Secret-fed
+          # environment; exec probes do not expand $(VAR).
+          startupProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 30
+
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+  # No storageClassName, so the cluster default applies (local-path on kind) and the manifest
+  # carries no assumption about which cluster it runs on.
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi

@@ -1,0 +1,17 @@
+# Production, second of three: data, migration, application. Applied only by
+# infra/k8s/deploy-prod.sh, which deletes the previous Job first and sets the image tag.
+#
+# Only the registry name is set here. The tag is per release and is never committed, so this
+# overlay applied on its own references schedular-backend's `dev` tag, which does not exist in the
+# registry, and the Job cannot start.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: schedular
+
+resources:
+  - ../../migrate
+
+images:
+  - name: schedular-backend
+    newName: ghcr.io/a-runebou/dd2482_project-backend

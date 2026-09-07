@@ -1,0 +1,6 @@
+# Declared here and in no other overlay, for the same reason as overlays/local-data: prod-data is
+# the longest-lived lifecycle, so deleting the application can never take the database volume.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: schedular

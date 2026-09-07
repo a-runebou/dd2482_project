@@ -1,0 +1,67 @@
+# `alembic upgrade head` with the backend image, run to completion before the application is
+# applied (ARCHITECTURE section 11). /readyz checks connectivity only, not the schema revision,
+# so nothing in the application would notice an unmigrated database; the ordering is enforced
+# by applying this separately and waiting for it.
+#
+# A Job's pod template is immutable: to run it again, with a new image or otherwise, delete the
+# old Job first.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 300
+  # No ttlSecondsAfterFinished: the finished Job and its pod stay so their logs can be read.
+
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: schedular
+        app.kubernetes.io/component: migrate
+
+    spec:
+      restartPolicy: Never
+
+      # Same image as the backend, so the same missing USER, so the same fix.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: migrate
+          image: schedular-backend:dev
+
+          # Relative to the image's WORKDIR /app, where alembic.ini lives.
+          command:
+            - alembic
+            - upgrade
+            - head
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: false
+
+          # alembic/env.py takes the URL from app.config, which falls back to a localhost URL
+          # when DATABASE_URL is absent. Not optional, so a missing key fails the pod instead of
+          # migrating nothing. No other setting is read by a migration.
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: schedular-secrets
+                  key: DATABASE_URL
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

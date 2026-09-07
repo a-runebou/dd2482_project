@@ -1,0 +1,19 @@
+# The mail sink, shared by overlays/local and overlays/prod. backend/app/infra/mail.py speaks plain
+# SMTP with no STARTTLS, so no environment can deliver to a real relay yet; every message, magic
+# links and circuit alerts included, lands here and is read through a port-forward to the UI.
+#
+# Part of the application lifecycle rather than the data one: it keeps messages in memory and in
+# a temporary file only, so nothing is lost that a rollout would need to keep.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - deployment.yaml
+  - service.yaml
+  - networkpolicy.yaml
+
+# Same convention as base/: non-selector labels only.
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/part-of: schedular

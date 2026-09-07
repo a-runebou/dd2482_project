@@ -1,0 +1,7 @@
+# Declared here and in no other overlay. local-data is the longest-lived of the three lifecycles
+# (data, migration, application), so owning the Namespace here means deleting the application
+# overlay can never take the database volume with it.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: schedular-local

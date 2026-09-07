@@ -1,0 +1,24 @@
+# Environment-independent definition of the three workloads, their two Services and the Ingress
+# that splits one host between them. The Ingress has no host; each overlay supplies one.
+#
+# No namespace and no Namespace object here: the base is meant to be rendered into whichever
+# namespace an overlay chooses. The ConfigMap `schedular-config` and the Secret
+# `schedular-secrets` are referenced but not defined here either; see overlays/local.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - backend-deployment.yaml
+  - backend-service.yaml
+  - worker-deployment.yaml
+  - frontend-deployment.yaml
+  - frontend-service.yaml
+  - ingress.yaml
+
+# Non-selector labels only. includeSelectors stays false because selectors are immutable after
+# creation: a transformer that wrote into them would turn any future label change into a delete
+# and recreate of the Deployment. Each Deployment spells its own selector out instead.
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/part-of: schedular

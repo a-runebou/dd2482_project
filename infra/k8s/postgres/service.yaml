@@ -1,0 +1,17 @@
+# The name, port and database must match the host part of DATABASE_URL in schedular-secrets
+# (postgres:5432/schedular). Also the StatefulSet's serviceName. Not headless: clients need one
+# stable address, not per-pod records.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: schedular
+    app.kubernetes.io/component: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+      protocol: TCP

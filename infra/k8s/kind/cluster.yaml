@@ -1,0 +1,20 @@
+# The local rehearsal cluster, kind-schedular. Create with:
+#   kind create cluster --config infra/k8s/kind/cluster.yaml
+#
+# Port mappings can only be set when the cluster is created, so a cluster made without this file
+# must be deleted and recreated to gain them.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: schedular
+nodes:
+  - role: control-plane
+    # Pinned by digest to the image the previous cluster ran, so a rebuild gives the same
+    # Kubernetes version the manifests are validated against (v1.37.0).
+    image: kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5
+    extraPortMappings:
+      # Traefik's web entrypoint is a NodePort on 30080 (traefik/values-local.yaml). Bound to
+      # loopback only, so the rehearsal cluster is never reachable from the local network.
+      - containerPort: 30080
+        hostPort: 80
+        listenAddress: "127.0.0.1"
+        protocol: TCP

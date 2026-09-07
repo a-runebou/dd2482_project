@@ -1,0 +1,109 @@
+# Production, third of three: data, migration, application, on the k3s VM described in
+# infra/azure/README.md. Applied only by infra/k8s/deploy-prod.sh, after the migration Job has
+# completed. The Namespace is owned by overlays/prod-data.
+#
+# Two things are deliberately missing and supplied per release by deploy-prod.sh: the image tag
+# and BUILD_SHA. Applied on its own, this overlay points at schedular-*'s `dev` tag, which no build
+# workflow publishes, and lacks a key every backend and worker container requires, so no new pod
+# can start and the running ones keep serving (maxUnavailable: 0).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: schedular
+
+resources:
+  - ../../base
+  - ../../mailpit
+
+# Public packages, so no imagePullSecret.
+images:
+  - name: schedular-backend
+    newName: ghcr.io/a-runebou/dd2482_project-backend
+  - name: schedular-frontend
+    newName: ghcr.io/a-runebou/dd2482_project-frontend
+
+patches:
+  # The VM's Azure DNS name. cert-manager's ingress-shim sees the annotation and the tls section
+  # and keeps a Certificate for this host in the Secret schedular-tls. The issuer starts as
+  # letsencrypt-staging and is switched to letsencrypt-prod once staging has issued
+  # (docs/deployment/runbook.md), so a misconfiguration spends staging's generous rate limits
+  # rather than production's.
+  - target:
+      group: networking.k8s.io
+      version: v1
+      kind: Ingress
+      name: schedular
+    patch: |-
+      - op: add
+        path: /spec/rules/0/host
+        value: schedular.polandcentral.cloudapp.azure.com
+      - op: add
+        path: /spec/tls
+        value:
+          - hosts:
+              - schedular.polandcentral.cloudapp.azure.com
+            secretName: schedular-tls
+      - op: add
+        path: /metadata/annotations
+        value:
+          cert-manager.io/cluster-issuer: letsencrypt-staging
+
+  # Production only, because only images built after Alexander's worker heartbeat contain
+  # app.worker.health. The heartbeat is touched once per loop iteration and called stale after
+  # 10 s, so liveness tolerates two minutes of staleness (4 x 30 s) before restarting the worker:
+  # a single slow job, such as an SMTP send with its 10 s timeout, must not kill it. The startup
+  # probe gives the first iteration up to 120 s (24 x 5 s) and holds liveness off until then. No
+  # readiness probe: nothing routes to the worker.
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: worker
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: worker
+      spec:
+        template:
+          spec:
+            containers:
+              - name: worker
+                startupProbe:
+                  exec:
+                    command:
+                      - python
+                      - -m
+                      - app.worker.health
+                  periodSeconds: 5
+                  # Same allowance as liveness rather than the 1 s default: interpreter start-up
+                  # on a burstable VM busy with a rollout can take longer than that.
+                  timeoutSeconds: 10
+                  failureThreshold: 24
+                livenessProbe:
+                  exec:
+                    command:
+                      - python
+                      - -m
+                      - app.worker.health
+                  periodSeconds: 30
+                  timeoutSeconds: 10
+                  failureThreshold: 4
+
+# Non-secret settings. SMTP goes to the in-cluster Mailpit sink because mail.py cannot speak TLS to
+# a real relay; SMTP_FROM and OPS_ALERT_EMAIL are as in overlays/local, so alerts are off until an
+# address is chosen, and would land in Mailpit too. BUILD_SHA is added per release by
+# deploy-prod.sh.
+configMapGenerator:
+  - name: schedular-config
+    literals:
+      - ENVIRONMENT=production
+      - PUBLIC_APP_URL=https://schedular.polandcentral.cloudapp.azure.com
+      - AUTH_COOKIE_SECURE=true
+      - SMTP_HOST=mailpit
+      - SMTP_PORT=1025
+      - SMTP_FROM=schedular@example.local
+      - OPS_ALERT_EMAIL=
+
+# There is deliberately no Secret here. `schedular-secrets` is created out of band, once, as
+# described in docs/deployment/runbook.md.

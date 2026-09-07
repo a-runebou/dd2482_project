@@ -1,0 +1,13 @@
+# A long-lived token for github-deployer, filled in by the token controller once applied; there is
+# deliberately no data here. Rotation: delete this Secret, apply this directory again and
+# regenerate PROD_KUBECONFIG with make-ci-kubeconfig.sh (runbook, "Rotating the CI credentials").
+apiVersion: v1
+kind: Secret
+type: kubernetes.io/service-account-token
+metadata:
+  name: github-deployer-token
+  labels:
+    app.kubernetes.io/name: schedular
+    app.kubernetes.io/component: ci-deployer
+  annotations:
+    kubernetes.io/service-account.name: github-deployer

@@ -1,0 +1,20 @@
+# The name is what SMTP_HOST says in both application overlays. ClusterIP only: there is no
+# Ingress, NodePort or LoadBalancer for Mailpit anywhere; the UI is reached by port-forward.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailpit
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: schedular
+    app.kubernetes.io/component: mailpit
+  ports:
+    - name: smtp
+      port: 1025
+      targetPort: smtp
+      protocol: TCP
+    - name: http
+      port: 8025
+      targetPort: http
+      protocol: TCP

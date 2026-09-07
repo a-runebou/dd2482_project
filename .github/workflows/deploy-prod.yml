@@ -1,0 +1,197 @@
+# Deploys an already built main commit to prod with infra/k8s/deploy-prod.sh release.
+#
+# Deliberately manual-only: workflow_dispatch and nothing else, and inactive until its secrets
+# exist. Activation, and the exact block that would make it follow build-images-prod
+# automatically, are in docs/deployment/runbook.md, "Automated deployment (prepared, not active)".
+# Running deploy-prod.sh by hand stays the normal path until then.
+name: deploy-prod
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Full 40-character main commit SHA whose main-<sha> images build-images-prod has published
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prod-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment: production
+    timeout-minutes: 30
+
+    env:
+      # The one place the commit enters the job; a later workflow_run trigger changes only this.
+      DEPLOY_SHA: ${{ inputs.sha }}
+      PROD_HOST: ${{ vars.PROD_HOST }}
+      KUBECTL_VERSION: v1.37.1
+      # Published at https://dl.k8s.io/release/v1.37.1/bin/linux/amd64/kubectl.sha256, read on
+      # 2026-10-05. Pinned here rather than fetched at run time from the same server as the binary.
+      KUBECTL_SHA256: 65691ff77eb6fa44c908b77a1082c9f092c3b9733b5cefabec0d1104890e21a8
+      TUNNEL_PORT: "16443"
+
+    steps:
+      # Only whether each secret is set reaches the shell, never its value.
+      - name: Preflight (secrets and variable present)
+        env:
+          HAS_SSH_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY != '' }}
+          HAS_KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS != '' }}
+          HAS_KUBECONFIG: ${{ secrets.PROD_KUBECONFIG != '' }}
+        run: |
+          missing=()
+          [[ "$HAS_SSH_KEY" == true ]] || missing+=(PROD_SSH_PRIVATE_KEY)
+          [[ "$HAS_KNOWN_HOSTS" == true ]] || missing+=(PROD_SSH_KNOWN_HOSTS)
+          [[ "$HAS_KUBECONFIG" == true ]] || missing+=(PROD_KUBECONFIG)
+          [[ -n "$PROD_HOST" ]] || missing+=("PROD_HOST (variable)")
+          if ((${#missing[@]} > 0)); then
+            printf '::error::Not activated: %s missing. Follow the activation checklist in docs/deployment/runbook.md, "Automated deployment (prepared, not active)".\n' "${missing[*]}"
+            exit 1
+          fi
+          # The host ends up on the ssh command line, so it must not be able to pass as an option.
+          if [[ ! "$PROD_HOST" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]]; then
+            echo "::error::PROD_HOST is not a plain lower-case host name."
+            exit 1
+          fi
+
+      # The input is only ever read from the environment, never interpolated into a script.
+      # The compare API answers without a checkout: "identical" or "ahead" means DEPLOY_SHA is
+      # main itself or one of its ancestors.
+      - name: Validate the SHA and check it is on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          if [[ ! "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::sha must be 40 lowercase hex characters."
+            exit 1
+          fi
+          status="$(gh api "repos/${REPOSITORY}/compare/${DEPLOY_SHA}...main" --jq .status)" || {
+            echo "::error::GitHub does not know commit ${DEPLOY_SHA} in ${REPOSITORY}."
+            exit 1
+          }
+          case "$status" in
+            identical | ahead) echo "${DEPLOY_SHA} is on main." ;;
+            *)
+              echo "::error::${DEPLOY_SHA} is not an ancestor of main (compare status: ${status})."
+              exit 1
+              ;;
+          esac
+
+      - name: Check out the commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      # The same check against the fetched history, before anything from the checkout runs.
+      - name: Confirm the checkout
+        run: |
+          [[ "$(git rev-parse HEAD)" == "$DEPLOY_SHA" ]] || { echo "::error::HEAD is not ${DEPLOY_SHA}."; exit 1; }
+          git merge-base --is-ancestor "$DEPLOY_SHA" origin/main \
+            || { echo "::error::${DEPLOY_SHA} is not an ancestor of origin/main."; exit 1; }
+
+      # Everything this job writes goes under RUNNER_TEMP, outside the checkout, because
+      # deploy-prod.sh refuses to release from a working tree that is not clean.
+      - name: Install kubectl ${{ env.KUBECTL_VERSION }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/bin/kubectl" \
+            "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          echo "${KUBECTL_SHA256}  ${RUNNER_TEMP}/bin/kubectl" | sha256sum --check --strict
+          chmod 755 "$RUNNER_TEMP/bin/kubectl"
+          "$RUNNER_TEMP/bin/kubectl" version --client
+
+      - name: Write the SSH key and known_hosts
+        env:
+          PROD_SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          PROD_SSH_KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          mkdir -p "$RUNNER_TEMP/deploy"
+          printf '%s\n' "$PROD_SSH_PRIVATE_KEY" >"$RUNNER_TEMP/deploy/id_ci"
+          printf '%s\n' "$PROD_SSH_KNOWN_HOSTS" >"$RUNNER_TEMP/deploy/known_hosts"
+          chmod 600 "$RUNNER_TEMP/deploy/id_ci" "$RUNNER_TEMP/deploy/known_hosts"
+
+      # -F /dev/null and IdentityAgent=none: only this key, no config, no agent. The key is
+      # restricted on the VM to forwarding 127.0.0.1:6443 and can run no command, hence -N.
+      - name: Open the SSH tunnel to the API
+        run: |
+          if ! ssh -f -N -M -S "$RUNNER_TEMP/deploy/tunnel.sock" \
+            -F /dev/null \
+            -i "$RUNNER_TEMP/deploy/id_ci" \
+            -o IdentitiesOnly=yes \
+            -o IdentityAgent=none \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/deploy/known_hosts" \
+            -o GlobalKnownHostsFile=/dev/null \
+            -o HostKeyAlgorithms=ssh-ed25519 \
+            -o ExitOnForwardFailure=yes \
+            -o ConnectTimeout=20 \
+            -o ServerAliveInterval=30 \
+            -L "${TUNNEL_PORT}:127.0.0.1:6443" \
+            "azureuser@${PROD_HOST}"; then
+            echo "::error::Could not open the tunnel to ${PROD_HOST}. The VM may be deallocated (infra/azure/vm.sh status); a runner cannot start it. Otherwise check the host key and the CI key's authorized_keys line."
+            exit 1
+          fi
+
+      - name: Write the kubeconfig
+        env:
+          PROD_KUBECONFIG: ${{ secrets.PROD_KUBECONFIG }}
+        run: |
+          umask 077
+          printf '%s\n' "$PROD_KUBECONFIG" >"$RUNNER_TEMP/deploy/kubeconfig"
+          chmod 600 "$RUNNER_TEMP/deploy/kubeconfig"
+
+      - name: Release main-${{ env.DEPLOY_SHA }}
+        id: release
+        run: |
+          KUBECTL="$RUNNER_TEMP/bin/kubectl --kubeconfig $RUNNER_TEMP/deploy/kubeconfig" \
+          RENDER_KUBECTL="$RUNNER_TEMP/bin/kubectl" \
+            infra/k8s/deploy-prod.sh release "main-${DEPLOY_SHA}"
+
+      # From the runner, through the public endpoint, exactly as a user would. A failure fails the
+      # workflow but deliberately rolls nothing back: the release's own gate has already passed.
+      - name: Smoke test
+        id: smoke
+        run: |
+          failed=0
+          for path in /healthz /api/v1/config; do
+            code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 \
+              --retry 5 --retry-delay 5 --retry-all-errors "https://${PROD_HOST}${path}" || true)"
+            echo "${path}: ${code}"
+            [[ "$code" == 200 ]] || failed=1
+          done
+          exit "$failed"
+
+      - name: Close the tunnel and delete credentials
+        if: always()
+        run: |
+          if [[ -S "$RUNNER_TEMP/deploy/tunnel.sock" ]]; then
+            ssh -F /dev/null -S "$RUNNER_TEMP/deploy/tunnel.sock" -O exit "azureuser@${PROD_HOST}" || true
+          fi
+          rm -rf "$RUNNER_TEMP/deploy"
+
+      - name: Job summary
+        if: always()
+        env:
+          RELEASE_OUTCOME: ${{ steps.release.outcome }}
+          SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          {
+            echo "## Prod deployment"
+            echo "- Commit: \`${DEPLOY_SHA}\`"
+            echo "- Image tag: \`main-${DEPLOY_SHA}\`"
+            echo "- Release: ${RELEASE_OUTCOME:-not reached}"
+            echo "- Smoke test: ${SMOKE_OUTCOME:-not reached}"
+            echo "- Outcome: ${JOB_STATUS}"
+          } >>"$GITHUB_STEP_SUMMARY"

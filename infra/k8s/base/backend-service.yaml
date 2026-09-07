@@ -1,0 +1,23 @@
+# Stable in-cluster address for the API. The Ingress routes /api here directly; the frontend's
+# nginx also uses it as its proxy_pass upstream, so its name must not change. ClusterIP only:
+# nothing outside the cluster reaches it except through the Ingress.
+#
+# Deliberately a normal ClusterIP and explicitly NOT headless (no `clusterIP: None`): nginx
+# resolves the upstream host once at start-up and caches the address for the life of the worker
+# process. A headless Service would hand it a pod IP, which stops existing after the next backend
+# rollout, and the frontend would proxy into a void until it was restarted. A virtual cluster IP
+# outlives every pod behind it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: schedular
+    app.kubernetes.io/component: backend
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP
