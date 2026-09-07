@@ -1,0 +1,1274 @@
+openapi: 3.1.0
+info:
+  title: Schedular API
+  version: 1.0.0-draft.1
+  description: |
+    Normative contract for the Schedular group scheduling application.
+
+    This document is hand-written and is the single source of truth. The FastAPI backend must
+    conform to it and conformance is checked in CI. The frontend generates its types from it
+    and must not hand-write request or response types.
+
+    Conventions:
+      * All instants are RFC 3339 in UTC with a Z suffix. Dates are YYYY-MM-DD.
+      * Slot granularity is 30 minutes and is served by GET /config.
+      * Groups are addressed by slug, never by id.
+      * Collections are envelopes with a cursor, never bare arrays.
+      * Errors are RFC 9457 problem documents with a stable machine-readable code.
+      * Mutating operations accept an optional Idempotency-Key header.
+  contact:
+    name: Adrian Grund, Alexander Runebou
+  license:
+    name: MIT
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Local and docker-compose development
+  - url: https://{host}/api/v1
+    description: Deployed environments
+    variables:
+      host:
+        default: schedular.example.org
+
+tags:
+  - name: meta
+    description: Configuration and reserved endpoints
+  - name: auth
+    description: Passwordless authentication
+  - name: me
+    description: The authenticated user and their calendar sources
+  - name: groups
+    description: Groups and membership
+  - name: scheduling
+    description: Availability, suggestions, proposals, votes, confirmation
+  - name: export
+    description: Calendar export
+
+security:
+  - bearerAuth: []
+
+paths:
+  /config:
+    get:
+      tags: [meta]
+      summary: Server-enforced limits and constants
+      operationId: getConfig
+      security: []
+      responses:
+        "200":
+          description: Configuration
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Config" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /auth/magic-link:
+    post:
+      tags: [auth]
+      summary: Request a sign-in link by e-mail
+      description: Always returns 202, whether or not the address is known, to avoid disclosing account existence.
+      operationId: requestMagicLink
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MagicLinkRequest" }
+      responses:
+        "202": { description: "Accepted. A mail is enqueued if the address is valid." }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /auth/session:
+    post:
+      tags: [auth]
+      summary: Exchange a magic-link token for a session
+      operationId: createSession
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SessionCreateRequest" }
+      responses:
+        "200":
+          description: Session created. The refresh token is set as an HttpOnly cookie.
+          headers:
+            Set-Cookie:
+              description: refresh_token, HttpOnly, SameSite=Lax, Secure when TLS is configured
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SessionResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+    delete:
+      tags: [auth]
+      summary: Sign out and revoke the refresh token family
+      operationId: deleteSession
+      security: []
+      responses:
+        "204": { description: Signed out }
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      summary: Rotate the refresh cookie and issue a new access token
+      description: Reuse of an already consumed refresh token revokes the entire token family.
+      operationId: refreshSession
+      security: []
+      responses:
+        "200":
+          description: New access token
+          headers:
+            Set-Cookie:
+              description: Rotated refresh_token
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SessionResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+
+  /me:
+    get:
+      tags: [me]
+      summary: The authenticated user
+      operationId: getMe
+      responses:
+        "200":
+          description: User
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+    patch:
+      tags: [me]
+      summary: Update profile
+      operationId: patchMe
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UserPatch" }
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+
+  /me/calendar-sources:
+    get:
+      tags: [me]
+      summary: List calendar sources
+      operationId: listCalendarSources
+      responses:
+        "200":
+          description: Sources
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CalendarSourcePage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+    post:
+      tags: [me]
+      summary: Register a subscription URL and enqueue a first poll
+      operationId: createCalendarSource
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CalendarSourceCreate" }
+      responses:
+        "201":
+          description: Created with status pending
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CalendarSource" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /me/calendar-sources/upload:
+    post:
+      tags: [me]
+      summary: Upload an .ics file as a one-off source
+      operationId: uploadCalendarSource
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: An iCalendar file, at most max_ics_bytes
+      responses:
+        "201":
+          description: Parsed and stored
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CalendarSource" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+
+  /me/calendar-sources/{sourceId}:
+    parameters:
+      - $ref: "#/components/parameters/SourceId"
+    delete:
+      tags: [me]
+      summary: Delete a source and its derived busy blocks
+      operationId: deleteCalendarSource
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /me/calendar-sources/{sourceId}/refresh:
+    parameters:
+      - $ref: "#/components/parameters/SourceId"
+    post:
+      tags: [me]
+      summary: Enqueue an immediate re-poll
+      operationId: refreshCalendarSource
+      responses:
+        "202":
+          description: Poll enqueued
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CalendarSource" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /me/busy:
+    get:
+      tags: [me]
+      summary: Merged busy intervals in a window
+      operationId: getMyBusy
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Busy intervals, merged and sorted by start
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BusyBlockPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+
+  /groups:
+    get:
+      tags: [groups]
+      summary: List the groups the user belongs to
+      operationId: listGroups
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Groups
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GroupPage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+    post:
+      tags: [groups]
+      summary: Create a group, the caller becomes owner
+      operationId: createGroup
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GroupCreate" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GroupWithInvite" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+
+  /groups/{slug}:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+    get:
+      tags: [groups]
+      summary: Read a group
+      description: Non-members receive 404 group_not_found, never 403, so slugs cannot be probed.
+      operationId: getGroup
+      responses:
+        "200":
+          description: Group
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Group" }
+        "304": { description: Not modified }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [groups]
+      summary: Update a group, owner only
+      operationId: patchGroup
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GroupPatch" }
+      responses:
+        "200":
+          description: Updated
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Group" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "412": { $ref: "#/components/responses/PreconditionFailed" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+    delete:
+      tags: [groups]
+      summary: Delete a group, owner only
+      operationId: deleteGroup
+      responses:
+        "204": { description: Deleted }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /groups/{slug}/join:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+    post:
+      tags: [groups]
+      summary: Join a group with an invite token
+      operationId: joinGroup
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/JoinRequest" }
+      responses:
+        "200":
+          description: Joined
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Group" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /groups/{slug}/members:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+    get:
+      tags: [groups]
+      summary: List members
+      operationId: listMembers
+      responses:
+        "200":
+          description: Members
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberPage" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /groups/{slug}/members/{userId}:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+      - $ref: "#/components/parameters/UserId"
+    delete:
+      tags: [groups]
+      summary: Remove a member, owner only, or leave the group yourself
+      description: The owner cannot be removed and cannot leave. Deletes that member's availability and votes.
+      operationId: removeMember
+      responses:
+        "204": { description: Removed }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /groups/{slug}/availability:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+    get:
+      tags: [scheduling]
+      summary: The full availability matrix and its aggregate
+      description: |
+        Poll this with If-None-Match while the grid is open. The recommended interval is served
+        as poll_interval_seconds by GET /config.
+      operationId: getAvailability
+      responses:
+        "200":
+          description: Matrix
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AvailabilityMatrix" }
+        "304": { description: Not modified }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /groups/{slug}/availability/me:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+    get:
+      tags: [scheduling]
+      summary: The caller's own availability in this group
+      operationId: getMyAvailability
+      responses:
+        "200":
+          description: Own availability
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AvailabilitySelection" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [scheduling]
+      summary: Replace the caller's availability
+      description: |
+        A full replacement, and therefore idempotent. Every instant must be aligned to
+        slot_minutes and lie inside the group's date range and daily window when evaluated in
+        the group's timezone, otherwise 422 slot_not_in_window. A slot listed in both arrays is
+        treated as preferred.
+      operationId: putMyAvailability
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AvailabilitySelection" }
+      responses:
+        "200":
+          description: Stored
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AvailabilitySelection" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /groups/{slug}/suggestions:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+    get:
+      tags: [scheduling]
+      summary: Ranked candidate windows computed from the matrix
+      description: Computed on request and never persisted. See the architecture document for the scoring rule.
+      operationId: getSuggestions
+      parameters:
+        - name: duration_minutes
+          in: query
+          schema: { type: integer, multipleOf: 30, minimum: 30, maximum: 480, default: 60 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 20, default: 5 }
+      responses:
+        "200":
+          description: Suggestions, best first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuggestionPage" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+
+  /groups/{slug}/proposals:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+    get:
+      tags: [scheduling]
+      summary: List proposals with their votes
+      operationId: listProposals
+      responses:
+        "200":
+          description: Proposals
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProposalPage" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [scheduling]
+      summary: Create a proposal, owner only
+      description: Either taken from a suggestion or entered manually. Rejected on a confirmed group.
+      operationId: createProposal
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProposalCreate" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Proposal" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+
+  /groups/{slug}/proposals/{proposalId}:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+      - $ref: "#/components/parameters/ProposalId"
+    delete:
+      tags: [scheduling]
+      summary: Delete a proposal, owner only
+      operationId: deleteProposal
+      responses:
+        "204": { description: Deleted }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /groups/{slug}/proposals/{proposalId}/vote/me:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+      - $ref: "#/components/parameters/ProposalId"
+    put:
+      tags: [scheduling]
+      summary: Cast or change the caller's vote
+      operationId: putMyVote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VoteInput" }
+      responses:
+        "200":
+          description: Updated proposal
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Proposal" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      tags: [scheduling]
+      summary: Withdraw the caller's vote
+      operationId: deleteMyVote
+      responses:
+        "204": { description: Withdrawn }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /groups/{slug}/confirmation:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+    post:
+      tags: [scheduling]
+      summary: Confirm a proposal as the final slot, owner only
+      description: Moves the group to state confirmed, freezes availability and voting, and enqueues reminders.
+      operationId: confirmGroup
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfirmationRequest" }
+      responses:
+        "200":
+          description: Confirmed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Group" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      tags: [scheduling]
+      summary: Unconfirm, owner only
+      description: Returns the group to open and cancels pending reminders.
+      operationId: unconfirmGroup
+      responses:
+        "200":
+          description: Reopened
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Group" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /groups/{slug}/event.ics:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+    get:
+      tags: [export]
+      summary: Download the confirmed event as an iCalendar file
+      operationId: getEventIcs
+      responses:
+        "200":
+          description: iCalendar document with a single VEVENT
+          content:
+            text/calendar:
+              schema: { type: string }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /groups/{slug}/feed.ics:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+    get:
+      tags: [export]
+      summary: Subscribable read-only calendar feed for the group
+      description: |
+        Unauthenticated by design and authorized solely by an unguessable feed token, because
+        calendar clients cannot present bearer tokens. The token is rotatable by the owner.
+        Contains the confirmed event only.
+      operationId: getGroupFeed
+      security: []
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema: { type: string, minLength: 32, maxLength: 64 }
+      responses:
+        "200":
+          description: iCalendar document
+          content:
+            text/calendar:
+              schema: { type: string }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /events:
+    post:
+      tags: [meta]
+      summary: "Reserved: client analytics ingest"
+      description: Contracted in v1 and accepted as a no-op. Implemented with the analytics milestone.
+      operationId: ingestEvents
+      security:
+        - bearerAuth: []
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AnalyticsBatch" }
+      responses:
+        "202": { description: Accepted and discarded in v1 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /flags:
+    get:
+      tags: [meta]
+      summary: "Reserved: feature flag assignments for the caller"
+      description: Returns an empty map in v1. Assignment is sticky per user or per anonymous id.
+      operationId: getFlags
+      security:
+        - bearerAuth: []
+        - {}
+      responses:
+        "200":
+          description: Flag assignments
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FlagAssignments" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Short-lived access token, held in memory by the frontend, never in localStorage.
+
+  headers:
+    ETag:
+      description: Opaque validator derived from the group version.
+      schema: { type: string }
+    RetryAfter:
+      description: Seconds to wait before retrying.
+      schema: { type: integer }
+
+  parameters:
+    Slug:
+      name: slug
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Slug" }
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    SourceId:
+      name: sourceId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ProposalId:
+      name: proposalId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+    IfMatch:
+      name: If-Match
+      in: header
+      schema: { type: string }
+      description: Optimistic concurrency. A mismatch yields 412 version_conflict.
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      schema: { type: string, format: uuid }
+      description: A repeat within 24 hours replays the stored response. The same key with a different body yields 409.
+
+  responses:
+    BadRequest:
+      description: Malformed request
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    Unauthenticated:
+      description: Missing, invalid or expired credentials
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    Forbidden:
+      description: Authenticated but not permitted
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    NotFound:
+      description: Not found, or hidden from a non-member
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    Conflict:
+      description: Conflicts with the current state
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    PreconditionFailed:
+      description: If-Match did not match the current version
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    PayloadTooLarge:
+      description: Upload exceeds max_ics_bytes
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    UnprocessableEntity:
+      description: Semantically invalid, see code
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    RateLimited:
+      description: Too many requests
+      headers:
+        Retry-After: { $ref: "#/components/headers/RetryAfter" }
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    ServiceUnavailable:
+      description: Dependency unavailable, typically the database circuit breaker being open
+      headers:
+        Retry-After: { $ref: "#/components/headers/RetryAfter" }
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+
+  schemas:
+    Slug:
+      type: string
+      pattern: "^[1-9A-HJ-NP-Za-km-z]{12}$"
+      description: Base58, 12 characters, unguessable.
+      examples: ["7fQ2mXk9Lp3R"]
+
+    Instant:
+      type: string
+      format: date-time
+      description: RFC 3339 in UTC, always ending in Z, always aligned to slot_minutes where it denotes a slot.
+      examples: ["2026-10-05T08:00:00Z"]
+
+    ErrorCode:
+      type: string
+      description: Stable machine-readable error identifier. Clients switch on this and never on detail.
+      enum:
+        - validation_failed
+        - unauthenticated
+        - token_expired
+        - forbidden
+        - not_owner
+        - not_found
+        - group_not_found
+        - already_member
+        - group_confirmed
+        - member_limit_reached
+        - idempotency_key_reuse
+        - version_conflict
+        - slot_not_in_window
+        - range_too_long
+        - ics_parse_failed
+        - rate_limited
+        - ics_fetch_failed
+        - db_circuit_open
+        - service_unavailable
+
+    Problem:
+      type: object
+      description: RFC 9457 problem document.
+      required: [type, title, status, code]
+      properties:
+        type: { type: string, format: uri, default: "about:blank" }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string, description: Human-readable, not for programmatic use }
+        instance: { type: string }
+        code: { $ref: "#/components/schemas/ErrorCode" }
+        errors:
+          type: array
+          description: Field-level detail for validation_failed.
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field: { type: string }
+              message: { type: string }
+
+    Config:
+      type: object
+      required:
+        - slot_minutes
+        - max_range_days
+        - max_members
+        - max_groups_per_user
+        - max_proposals_per_group
+        - max_calendar_sources
+        - max_ics_bytes
+        - max_ics_events
+        - min_duration_minutes
+        - max_duration_minutes
+        - reminder_lead_hours
+        - poll_interval_seconds
+        - environment
+      properties:
+        slot_minutes: { type: integer, const: 30 }
+        max_range_days: { type: integer, examples: [31] }
+        max_members: { type: integer, examples: [50] }
+        max_groups_per_user: { type: integer, examples: [20] }
+        max_proposals_per_group: { type: integer, examples: [20] }
+        max_calendar_sources: { type: integer, examples: [5] }
+        max_ics_bytes: { type: integer, examples: [2097152] }
+        max_ics_events: { type: integer, examples: [5000] }
+        min_duration_minutes: { type: integer, examples: [30] }
+        max_duration_minutes: { type: integer, examples: [480] }
+        reminder_lead_hours: { type: integer, examples: [24] }
+        poll_interval_seconds: { type: integer, description: Recommended client polling interval for the grid, examples: [15] }
+        environment: { type: string, enum: [development, staging, production] }
+        build_sha: { type: string }
+
+    MagicLinkRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+        redirect_path:
+          type: string
+          description: Application path to return to, must be relative and is validated server-side.
+          pattern: "^/[A-Za-z0-9/_-]*$"
+
+    SessionCreateRequest:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string, minLength: 32, maxLength: 512 }
+
+    SessionResponse:
+      type: object
+      required: [access_token, token_type, expires_in, user]
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, const: Bearer }
+        expires_in: { type: integer, description: Seconds, examples: [900] }
+        user: { $ref: "#/components/schemas/User" }
+
+    User:
+      type: object
+      required: [id, email, display_name, timezone, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        display_name: { type: string, minLength: 1, maxLength: 64 }
+        timezone: { type: string, description: IANA name, examples: ["Europe/Stockholm"] }
+        notify_email_default: { type: boolean, default: true }
+        created_at: { $ref: "#/components/schemas/Instant" }
+
+    UserPatch:
+      type: object
+      minProperties: 1
+      properties:
+        display_name: { type: string, minLength: 1, maxLength: 64 }
+        timezone: { type: string }
+        notify_email_default: { type: boolean }
+
+    CalendarSource:
+      type: object
+      required: [id, kind, status, event_count, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [upload, url] }
+        url: { type: [string, "null"], format: uri }
+        label: { type: [string, "null"], maxLength: 64 }
+        status: { type: string, enum: [pending, ok, error] }
+        last_polled_at: { anyOf: [{ $ref: "#/components/schemas/Instant" }, { type: "null" }] }
+        last_error_code: { type: [string, "null"], enum: [ics_fetch_failed, ics_parse_failed, null] }
+        event_count: { type: integer, minimum: 0 }
+        created_at: { $ref: "#/components/schemas/Instant" }
+
+    CalendarSourceCreate:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: An http, https or webcal URL. Fetched server-side only, with SSRF protection against private address ranges.
+          maxLength: 2048
+        label: { type: string, maxLength: 64 }
+
+    CalendarSourcePage:
+      type: object
+      required: [data, next_cursor]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/CalendarSource" }
+        next_cursor: { type: [string, "null"] }
+
+    BusyBlock:
+      type: object
+      required: [start_at, end_at]
+      properties:
+        start_at: { $ref: "#/components/schemas/Instant" }
+        end_at: { $ref: "#/components/schemas/Instant" }
+        source_id: { type: [string, "null"], format: uuid }
+
+    BusyBlockPage:
+      type: object
+      required: [data, next_cursor]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/BusyBlock" }
+        next_cursor: { type: [string, "null"] }
+
+    GroupState:
+      type: string
+      enum: [open, confirmed, archived]
+
+    Group:
+      type: object
+      required:
+        - slug
+        - name
+        - owner_id
+        - timezone
+        - date_start
+        - date_end
+        - window_start_minute
+        - window_end_minute
+        - slot_minutes
+        - state
+        - member_count
+        - version
+        - created_at
+        - updated_at
+      properties:
+        slug: { $ref: "#/components/schemas/Slug" }
+        name: { type: string, minLength: 1, maxLength: 100 }
+        description: { type: [string, "null"], maxLength: 1000 }
+        owner_id: { type: string, format: uuid }
+        timezone: { type: string, description: IANA name used for rendering and for window evaluation }
+        date_start: { type: string, format: date }
+        date_end: { type: string, format: date, description: Inclusive }
+        window_start_minute: { type: integer, minimum: 0, maximum: 1440, multipleOf: 30 }
+        window_end_minute: { type: integer, minimum: 0, maximum: 1440, multipleOf: 30 }
+        slot_minutes: { type: integer, const: 30 }
+        state: { $ref: "#/components/schemas/GroupState" }
+        confirmed_proposal: { anyOf: [{ $ref: "#/components/schemas/Proposal" }, { type: "null" }] }
+        member_count: { type: integer, minimum: 1 }
+        my_role: { type: string, enum: [owner, member] }
+        feed_url: { type: [string, "null"], format: uri, description: Present for members only }
+        version: { type: integer, minimum: 1 }
+        created_at: { $ref: "#/components/schemas/Instant" }
+        updated_at: { $ref: "#/components/schemas/Instant" }
+
+    GroupWithInvite:
+      allOf:
+        - $ref: "#/components/schemas/Group"
+        - type: object
+          required: [invite_url]
+          properties:
+            invite_url:
+              type: string
+              format: uri
+              description: Returned on creation and on rotation only, never on subsequent reads.
+
+    GroupCreate:
+      type: object
+      required: [name, date_start, date_end, window_start_minute, window_end_minute]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        description: { type: string, maxLength: 1000 }
+        timezone: { type: string, default: "Europe/Stockholm" }
+        date_start: { type: string, format: date }
+        date_end: { type: string, format: date }
+        window_start_minute: { type: integer, minimum: 0, maximum: 1410, multipleOf: 30 }
+        window_end_minute: { type: integer, minimum: 30, maximum: 1440, multipleOf: 30 }
+
+    GroupPatch:
+      type: object
+      minProperties: 1
+      description: Changing the range or window deletes availability rows that fall outside the new bounds.
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        description: { type: [string, "null"], maxLength: 1000 }
+        timezone: { type: string }
+        date_start: { type: string, format: date }
+        date_end: { type: string, format: date }
+        window_start_minute: { type: integer, minimum: 0, maximum: 1410, multipleOf: 30 }
+        window_end_minute: { type: integer, minimum: 30, maximum: 1440, multipleOf: 30 }
+        rotate_invite_token: { type: boolean }
+        rotate_feed_token: { type: boolean }
+
+    GroupPage:
+      type: object
+      required: [data, next_cursor]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Group" }
+        next_cursor: { type: [string, "null"] }
+
+    JoinRequest:
+      type: object
+      required: [invite_token]
+      properties:
+        invite_token: { type: string, minLength: 16, maxLength: 64 }
+
+    Member:
+      type: object
+      required: [user_id, display_name, role, responded, joined_at]
+      properties:
+        user_id: { type: string, format: uuid }
+        display_name: { type: string }
+        role: { type: string, enum: [owner, member] }
+        responded: { type: boolean, description: True once the member has submitted availability at least once }
+        notify_email: { type: boolean }
+        joined_at: { $ref: "#/components/schemas/Instant" }
+
+    MemberPage:
+      type: object
+      required: [data, next_cursor]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Member" }
+        next_cursor: { type: [string, "null"] }
+
+    AvailabilitySelection:
+      type: object
+      required: [available, preferred]
+      description: A full replacement of one member's selection. A slot present in both arrays counts as preferred.
+      properties:
+        available:
+          type: array
+          maxItems: 1488
+          items: { $ref: "#/components/schemas/Instant" }
+        preferred:
+          type: array
+          maxItems: 1488
+          items: { $ref: "#/components/schemas/Instant" }
+
+    ParticipantAvailability:
+      type: object
+      required: [user_id, display_name, responded, available, preferred]
+      properties:
+        user_id: { type: string, format: uuid }
+        display_name: { type: string }
+        responded: { type: boolean }
+        available:
+          type: array
+          description: Indices into the slots array of the enclosing matrix.
+          items: { type: integer, minimum: 0 }
+        preferred:
+          type: array
+          items: { type: integer, minimum: 0 }
+
+    SlotAggregate:
+      type: object
+      required: [slot_index, available_count, preferred_count]
+      properties:
+        slot_index: { type: integer, minimum: 0 }
+        available_count: { type: integer, minimum: 0 }
+        preferred_count: { type: integer, minimum: 0 }
+
+    AvailabilityMatrix:
+      type: object
+      required: [version, slots, participants, aggregate, responded_count, member_count]
+      description: |
+        Reads index into a shared slot vector to keep the payload small, while writes use plain
+        instants. This is the only asymmetry in the API and it is deliberate.
+      properties:
+        version: { type: integer }
+        slots:
+          type: array
+          description: Ordered slot start instants for the whole group window.
+          items: { $ref: "#/components/schemas/Instant" }
+        participants:
+          type: array
+          items: { $ref: "#/components/schemas/ParticipantAvailability" }
+        aggregate:
+          type: array
+          items: { $ref: "#/components/schemas/SlotAggregate" }
+        responded_count: { type: integer }
+        member_count: { type: integer }
+
+    Suggestion:
+      type: object
+      required: [start_at, end_at, score, available_user_ids, preferred_user_ids, missing_user_ids]
+      properties:
+        start_at: { $ref: "#/components/schemas/Instant" }
+        end_at: { $ref: "#/components/schemas/Instant" }
+        score: { type: number, description: Higher is better, comparable only within one response }
+        available_user_ids:
+          type: array
+          items: { type: string, format: uuid }
+        preferred_user_ids:
+          type: array
+          items: { type: string, format: uuid }
+        missing_user_ids:
+          type: array
+          description: Members who are not available for the whole window, including those who have not responded.
+          items: { type: string, format: uuid }
+
+    SuggestionPage:
+      type: object
+      required: [data, next_cursor]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Suggestion" }
+        next_cursor: { type: [string, "null"] }
+
+    VoteValue:
+      type: string
+      enum: ["yes", "maybe", "no"]
+
+    Proposal:
+      type: object
+      required: [id, start_at, end_at, origin, created_by, votes, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        start_at: { $ref: "#/components/schemas/Instant" }
+        end_at: { $ref: "#/components/schemas/Instant" }
+        origin: { type: string, enum: [suggested, manual] }
+        created_by: { type: string, format: uuid }
+        votes:
+          type: object
+          required: ["yes", "maybe", "no"]
+          properties:
+            "yes": { type: array, items: { type: string, format: uuid } }
+            "maybe": { type: array, items: { type: string, format: uuid } }
+            "no": { type: array, items: { type: string, format: uuid } }
+        my_vote: { anyOf: [{ $ref: "#/components/schemas/VoteValue" }, { type: "null" }] }
+        created_at: { $ref: "#/components/schemas/Instant" }
+
+    ProposalCreate:
+      type: object
+      required: [start_at, end_at]
+      properties:
+        start_at: { $ref: "#/components/schemas/Instant" }
+        end_at: { $ref: "#/components/schemas/Instant" }
+        origin: { type: string, enum: [suggested, manual], default: manual }
+
+    ProposalPage:
+      type: object
+      required: [data, next_cursor]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Proposal" }
+        next_cursor: { type: [string, "null"] }
+
+    VoteInput:
+      type: object
+      required: [value]
+      properties:
+        value: { $ref: "#/components/schemas/VoteValue" }
+
+    ConfirmationRequest:
+      type: object
+      required: [proposal_id]
+      properties:
+        proposal_id: { type: string, format: uuid }
+        send_reminders: { type: boolean, default: true }
+
+    AnalyticsBatch:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            required: [name, occurred_at]
+            properties:
+              name: { type: string, maxLength: 64 }
+              occurred_at: { $ref: "#/components/schemas/Instant" }
+              properties: { type: object, additionalProperties: true }
+
+    FlagAssignments:
+      type: object
+      required: [flags]
+      properties:
+        flags:
+          type: object
+          additionalProperties: { type: string }
+          description: Flag name to variant name. Empty in v1.
