@@ -9,3 +9,7 @@ F3 Runtime API client: openapi-fetch, typed by the generated paths type; its mid
 F4 Mocking: MSW, in Vitest and optionally in development, because it can script 304, 503 db_circuit_open with Retry-After and token_expired.
 
 F5 Layout: hand-written API code in `src/api/`, generated types in `src/api/generated/`, generated output committed and verified by check:api.
+
+F6 (provisional) API base URL: relative `/api/v1` by default, overridable at build time through `VITE_API_BASE_URL`; runtime configuration for the deployed image is undecided and depends on the CORS and origin question. Note: the resolver takes an explicit origin (`resolveBaseUrl(configured, origin)`) and the client passes `globalThis.location.origin`, because Node's `Request`, used by the Vitest jsdom environment, cannot parse a bare relative URL; in a browser this is equivalent to the relative default.
+
+F7 Error model: `ApiError` kinds `problem`, `network` and `unexpected`; UI code switches on `code` only for kind `problem`, and a code outside `ErrorCode` is never cast, it is `unexpected`.
