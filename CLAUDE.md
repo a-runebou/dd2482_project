@@ -47,12 +47,38 @@ Schedular: a group scheduling app. Monorepo. Read `docs/ARCHITECTURE.md` and
   validation and the suggestion scoring, including a fixture spanning the 25 October 2026
   daylight-saving change.
 - Every endpoint needs at least one happy-path and one authorization-failure test.
+- Every bug fix gets a regression test that fails before the fix and passes after it.
+- Never delete, skip or weaken an existing test to make a suite green. If a test is wrong, stop
+  and say so.
 - Do not test generated code, framework behaviour or the schema itself.
+
+## Session behaviour
+
+These apply to every agent session, with or without an accompanying task prompt.
+
+- Git belongs to the human. Never run a git command that changes state: no `commit`, `add`,
+  `push`, `branch`, `checkout`, `merge`, `rebase`, `stash`, `tag`, `reset` or `restore`.
+  Read-only git is fine: `status`, `log`, `diff`, `show`, `blame`. If a commit boundary matters,
+  say so in the summary instead of acting on it.
+- Stay inside the files the task names. `backend/` and `infra/compose/` belong to Alexander,
+  `frontend/` and `infra/k8s/` to Adrian; do not edit another workstream's files as a side
+  effect. If the task cannot be finished without doing so, stop and report.
+- Log before finishing:
+    1. Append an entry to `docs/agent-log/<YYYY-MM-DD>-<task-slug>.md` with the headings Task,
+       Model, Files changed, What I did, Discrepancies noticed, Assumptions made, Follow-ups for
+       later, Commands to verify. Write for a stranger, briefly.
+    2. Append one line to `docs/agent-log/INDEX.md`: date, task slug, model, one-sentence outcome.
+    3. Print a summary of at most fifteen lines: status (done, partial or blocked), files changed,
+       acceptance commands and their results, discrepancies, follow-ups, decisions needed. It must
+       stand alone, because it is pasted into a separate planning chat.
+- Report rather than improvise. A blocked task with a clear explanation is more useful than a
+  finished task built on a guess.
 
 ## Style
 
 - British English with Oxford spelling in comments, documentation and user-facing strings.
-- Conventional commits. Small, reviewable changes, one concern per pull request.
+- Conventional commits, small and reviewable, one concern each. Agents propose a commit message
+  in their summary; the human writes the commit.
 - Type hints everywhere in Python; no `Any` without a comment justifying it.
 - No comment that restates the code. Comments explain why, not what.
 
