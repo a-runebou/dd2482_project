@@ -2,6 +2,7 @@ import type { RouteObject } from "react-router";
 import { RootLayout } from "./RootLayout";
 import { RootErrorBoundary } from "./RootErrorBoundary";
 import { HomePage } from "../pages/HomePage";
+import { GroupsPage } from "../pages/GroupsPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 
 /**
@@ -16,6 +17,7 @@ export const appRoutes: RouteObject[] = [
     errorElement: <RootErrorBoundary />,
     children: [
       { index: true, element: <HomePage /> },
+      { path: "groups", element: <GroupsPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],
   },

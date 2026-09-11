@@ -19,3 +19,7 @@ F8 Routing and boot: React Router data router in library mode, with no loaders o
 F9 Source layout: src/api for data access, src/app for the shell (providers, routes, boot gate, error boundary), src/pages for route-level components. The layout for feature code is decided when the first feature lands.
 
 F10 Development mocking: an MSW browser worker runs only in development and only under vite --mode mock (VITE_API_MOCKING=enabled). Handlers are shared with tests and match the real base URL. The production bundle contains no MSW code; the generated worker file is copied to dist but never registered.
+
+F11 Dates: user-facing dates format in en-GB; calendar dates from the API (YYYY-MM-DD) are formatted as calendar dates and never converted through an instant or the browser's timezone.
+
+F12 Feature layout: feature code in src/features/<feature>/ (query options, hooks, components, colocated tests), shared presentational components in src/components/, framework-free pure helpers in src/lib/, thin route components in src/pages/; query keys start with the feature name.
