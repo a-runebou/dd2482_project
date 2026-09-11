@@ -1,9 +1,10 @@
 import { http, HttpResponse } from "msw";
 import { configFixture } from "./fixtures";
+import { mockUrl } from "./urls";
 
-// The path is matched with a leading wildcard so it is independent of the origin the client
-// builds its absolute base URL from. A bare relative path is not resolved against jsdom's
-// location by msw/node, so it would never intercept; the wildcard is the smallest fix.
+// Handlers match the absolute base URL the runtime client uses, so a request to a different
+// origin is not served. mockUrl resolves the same base URL as the client; jsdom (tests) and the
+// browser both supply the origin the default /api/v1 path is resolved against.
 export const handlers = [
-  http.get("*/api/v1/config", () => HttpResponse.json(configFixture)),
+  http.get(mockUrl("/config"), () => HttpResponse.json(configFixture)),
 ];

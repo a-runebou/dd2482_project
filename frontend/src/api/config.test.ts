@@ -5,6 +5,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { createElement } from "react";
 import { server } from "../mocks/server";
+import { mockUrl } from "../mocks/urls";
 import { configFixture, serviceUnavailableProblem } from "../mocks/fixtures";
 import { createQueryClient } from "./queryClient";
 import { useConfig } from "./config";
@@ -23,7 +24,7 @@ describe("useConfig", () => {
   beforeEach(() => {
     requestCount = 0;
     server.use(
-      http.get("*/api/v1/config", () => {
+      http.get(mockUrl("/config"), () => {
         requestCount += 1;
         return HttpResponse.json(configFixture);
       }),
@@ -59,7 +60,7 @@ describe("useConfig", () => {
 
   it("surfaces a 503 problem with retryAfterSeconds and does not retry", async () => {
     server.use(
-      http.get("*/api/v1/config", () => {
+      http.get(mockUrl("/config"), () => {
         requestCount += 1;
         return HttpResponse.json(serviceUnavailableProblem, {
           status: 503,
@@ -84,7 +85,7 @@ describe("useConfig", () => {
 
   it("classifies a network failure as network after exactly one retry", async () => {
     server.use(
-      http.get("*/api/v1/config", () => {
+      http.get(mockUrl("/config"), () => {
         requestCount += 1;
         return HttpResponse.error();
       }),

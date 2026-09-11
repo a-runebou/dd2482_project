@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveBaseUrl } from "./client";
+import { resolveBaseUrl } from "./baseUrl";
 
 describe("resolveBaseUrl", () => {
   it("uses the configured value when non-empty", () => {

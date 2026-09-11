@@ -1,6 +1,11 @@
 import "@testing-library/jest-dom/vitest";
 import { afterAll, afterEach } from "vitest";
+import { cleanup } from "@testing-library/react";
 import { server } from "../mocks/server";
+
+// globals:false, so Testing Library does not register its own afterEach(cleanup); register it
+// once here for every test file rather than repeating it per file.
+afterEach(cleanup);
 
 // Start MSW at module top level, before any test file imports the API client. openapi-fetch
 // captures globalThis.fetch when createClient runs (at import time), so MSW must have replaced
