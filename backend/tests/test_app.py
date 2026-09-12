@@ -33,3 +33,20 @@ def test_readyz_when_database_is_unavailable() -> None:
 
     assert response.status_code == 503
     assert response.json() == {"status": "not_ready"}
+
+def test_config() -> None:
+    response = client.get("/api/v1/config")
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["slot_minutes"] == 30
+    assert data["max_range_days"] == 31
+    assert data["max_members"] == 50
+    assert data["max_groups_per_user"] == 20
+    assert data["max_proposals_per_group"] == 20
+    assert data["max_calendar_sources"] == 5
+    assert data["min_duration_minutes"] == 30
+    assert data["max_duration_minutes"] == 480
+
