@@ -563,7 +563,7 @@ export interface components {
             type: string;
             title: string;
             status: number;
-            /** @description Human-readable */
+            /** @description Human-readable, not for programmatic use */
             detail?: string;
             instance?: string;
             code: components["schemas"]["ErrorCode"];
@@ -808,7 +808,7 @@ export interface components {
         Suggestion: {
             start_at: components["schemas"]["Instant"];
             end_at: components["schemas"]["Instant"];
-            /** @description Higher is better */
+            /** @description Higher is better, comparable only within one response */
             score: number;
             available_user_ids: string[];
             preferred_user_ids: string[];

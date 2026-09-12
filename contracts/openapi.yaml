@@ -857,7 +857,7 @@ components:
         type: { type: string, format: uri, default: "about:blank" }
         title: { type: string }
         status: { type: integer }
-        detail: { type: string, description: Human-readable, not for programmatic use }
+        detail: { type: string, description: "Human-readable, not for programmatic use" }
         instance: { type: string }
         code: { $ref: "#/components/schemas/ErrorCode" }
         errors:
@@ -898,7 +898,7 @@ components:
         min_duration_minutes: { type: integer, examples: [30] }
         max_duration_minutes: { type: integer, examples: [480] }
         reminder_lead_hours: { type: integer, examples: [24] }
-        poll_interval_seconds: { type: integer, description: Recommended client polling interval for the grid, examples: [15] }
+        poll_interval_seconds: { type: integer, description: "Recommended client polling interval for the grid", examples: [15] }
         environment: { type: string, enum: [development, staging, production] }
         build_sha: { type: string }
 
@@ -1175,7 +1175,7 @@ components:
       properties:
         start_at: { $ref: "#/components/schemas/Instant" }
         end_at: { $ref: "#/components/schemas/Instant" }
-        score: { type: number, description: Higher is better, comparable only within one response }
+        score: { type: number, description: "Higher is better, comparable only within one response" }
         available_user_ids:
           type: array
           items: { type: string, format: uuid }
@@ -1184,7 +1184,7 @@ components:
           items: { type: string, format: uuid }
         missing_user_ids:
           type: array
-          description: Members who are not available for the whole window, including those who have not responded.
+          description: "Members who are not available for the whole window, including those who have not responded."
           items: { type: string, format: uuid }
 
     SuggestionPage:
