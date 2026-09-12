@@ -3,11 +3,35 @@ import type { components } from "../api/generated/schema";
 import {
   configFixture,
   createdGroupFixture,
+  exchangedSessionFixture,
   groupsPage1Fixture,
   groupsPage2Fixture,
+  refreshedSessionFixture,
+  unauthenticatedProblem,
   validationFailedProblem,
 } from "./fixtures";
 import { mockUrl } from "./urls";
+
+/**
+ * Stands in for the HttpOnly refresh cookie, which JavaScript cannot see and MSW therefore
+ * cannot model with a real cookie. It starts present, so a boot probe restores a session the
+ * way a returning visitor's would; POST /auth/session sets it and DELETE /auth/session revokes
+ * it, which is what makes signing out stick instead of the boot probe signing the user straight
+ * back in. A test that wants the signed-out default calls setMockRefreshCookie(false); reset it
+ * in a beforeEach, because server.resetHandlers() does not touch module state.
+ */
+let refreshCookiePresent = true;
+
+export function setMockRefreshCookie(present: boolean): void {
+  refreshCookiePresent = present;
+}
+
+function unauthenticatedResponse() {
+  return HttpResponse.json(unauthenticatedProblem, {
+    status: 401,
+    headers: { "Content-Type": "application/problem+json" },
+  });
+}
 
 // Handlers match the absolute base URL the runtime client uses, so a request to a different
 // origin is not served. mockUrl resolves the same base URL as the client; jsdom (tests) and the
@@ -41,4 +65,19 @@ export const handlers = [
     mockUrl("/auth/magic-link"),
     () => new HttpResponse(null, { status: 202 }),
   ),
+  // Exchanging a magic-link token always succeeds, whatever the token: the token's validity is
+  // the backend's business, and a test that wants a rejection overrides this handler.
+  http.post(mockUrl("/auth/session"), () => {
+    refreshCookiePresent = true;
+    return HttpResponse.json(exchangedSessionFixture);
+  }),
+  http.post(mockUrl("/auth/refresh"), () =>
+    refreshCookiePresent
+      ? HttpResponse.json(refreshedSessionFixture)
+      : unauthenticatedResponse(),
+  ),
+  http.delete(mockUrl("/auth/session"), () => {
+    refreshCookiePresent = false;
+    return new HttpResponse(null, { status: 204 });
+  }),
 ];

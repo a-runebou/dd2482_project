@@ -151,3 +151,48 @@ export function createdGroupFixture(
     invite_url: `${globalThis.location.origin}/join/${createdGroupSlug}?invite=${createdGroupInviteToken}`,
   };
 }
+
+// The signed-in user. display_name is deliberately distinctive so a test can assert that the
+// chrome renders the name the server sent rather than the e-mail or any placeholder.
+export const userFixture: components["schemas"]["User"] = {
+  id: "b6e1d1d0-1f0a-4a3b-8c2e-777777777777",
+  email: "ada@example.com",
+  display_name: "Ada Lovelace",
+  timezone: "Europe/Stockholm",
+  notify_email_default: true,
+  created_at: "2026-08-01T08:00:00Z",
+};
+
+// Two distinct access tokens, so a test can tell an exchanged token from a refreshed one and
+// prove the retry carried the new one.
+export const exchangedSessionFixture: components["schemas"]["SessionResponse"] =
+  {
+    access_token: "access-token-from-exchange",
+    token_type: "Bearer",
+    expires_in: 900,
+    user: userFixture,
+  };
+
+export const refreshedSessionFixture: components["schemas"]["SessionResponse"] =
+  {
+    access_token: "access-token-from-refresh",
+    token_type: "Bearer",
+    expires_in: 900,
+    user: userFixture,
+  };
+
+export const unauthenticatedProblem: components["schemas"]["Problem"] = {
+  type: "about:blank",
+  title: "Unauthorized",
+  status: 401,
+  detail: "No credentials.",
+  code: "unauthenticated",
+};
+
+export const tokenExpiredProblem: components["schemas"]["Problem"] = {
+  type: "about:blank",
+  title: "Unauthorized",
+  status: 401,
+  detail: "The access token has expired.",
+  code: "token_expired",
+};

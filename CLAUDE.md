@@ -73,6 +73,7 @@ These apply to every agent session, with or without an accompanying task prompt.
        stand alone, because it is pasted into a separate planning chat.
 - Report rather than improvise. A blocked task with a clear explanation is more useful than a
   finished task built on a guess.
+- Frontend commands run from `frontend/` on the Node version in `.nvmrc`. If `node --version` disagrees, switch before running anything; `npm ci` will otherwise fail on the engine check.
 
 ## Style
 

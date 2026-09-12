@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import type { RouteObject } from "react-router";
@@ -8,7 +8,19 @@ import { appRoutes } from "./routes";
 import { createQueryClient } from "../api/queryClient";
 import { server } from "../mocks/server";
 import { mockUrl } from "../mocks/urls";
-import { groupsPage1Fixture } from "../mocks/fixtures";
+import { groupsPage1Fixture, userFixture } from "../mocks/fixtures";
+import { setMockRefreshCookie } from "../mocks/handlers";
+import { clearSession } from "../api/session";
+
+// The boot gate probes POST /auth/refresh once per QueryClient, and the mock refresh cookie is
+// present by default, so a test that wants a signed-out home page has to say so.
+beforeEach(() => {
+  setMockRefreshCookie(true);
+});
+
+afterEach(() => {
+  clearSession();
+});
 
 function renderApp(routes: RouteObject[], initialEntries: string[]) {
   const queryClient = createQueryClient();
@@ -137,12 +149,28 @@ describe("routing", () => {
   });
 
   it("navigates to /sign-in from the link on the home page", async () => {
+    // The Sign in link only exists without a session, so start the boot probe empty-handed.
+    setMockRefreshCookie(false);
+
     renderApp(appRoutes, ["/"]);
 
     fireEvent.click(await screen.findByRole("link", { name: "Sign in" }));
 
     expect(
       await screen.findByRole("heading", { name: "Sign in" }),
+    ).toBeInTheDocument();
+  });
+
+  it("signs in at /auth/callback and lands on the home page", async () => {
+    setMockRefreshCookie(false);
+
+    renderApp(appRoutes, ["/auth/callback?token=magic-link-token-3f9ac1d2"]);
+
+    expect(
+      await screen.findByRole("heading", { name: "Schedular" }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText(userFixture.display_name),
     ).toBeInTheDocument();
   });
 });
