@@ -104,3 +104,33 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run check:api
+
+  frontend-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      # An advisory with no upstream fix would otherwise block every pull request
+      # indefinitely, so this reports rather than gates; see the agent log for how
+      # a finding stays visible.
+      - run: npm audit --audit-level=high
+        continue-on-error: true
+
+  frontend-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: frontend/.nvmrc
+      - run: npx --yes @redocly/cli@2.52.1 lint contracts/openapi.yaml
