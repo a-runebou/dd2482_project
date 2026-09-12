@@ -1,0 +1,242 @@
+from datetime import UTC, date, datetime
+from uuid import uuid4
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app.api.dependencies import get_current_user
+from app.infra.db import get_db
+from app.infra.models.group import (
+    Group,
+    GroupState,
+    MembershipRole,
+)
+from app.infra.models.user import User
+from app.main import app
+from app.services.groups import GroupView
+
+client = TestClient(app)
+
+
+def make_user() -> User:
+    return User(
+        id=uuid4(),
+        email="alex@example.com",
+        display_name="Alex",
+        timezone="Europe/Stockholm",
+        notify_email_default=True,
+        created_at=datetime.now(UTC),
+    )
+
+
+def make_view(user: User) -> GroupView:
+    now = datetime.now(UTC)
+
+    group = Group(
+        id=uuid4(),
+        slug="7fQ2mXk9Lp3R",
+        name="Project group",
+        description=None,
+        owner_id=user.id,
+        timezone="Europe/Stockholm",
+        date_start=date(2026, 10, 1),
+        date_end=date(2026, 10, 7),
+        window_start_minute=480,
+        window_end_minute=1020,
+        slot_minutes=30,
+        state=GroupState.OPEN,
+        invite_token_hash="invite",
+        feed_token_hash="feed",
+        version=1,
+        created_at=now,
+        updated_at=now,
+    )
+
+    return GroupView(
+        group=group,
+        member_count=1,
+        my_role=MembershipRole.OWNER,
+    )
+
+
+def override_db():
+    yield object()
+
+
+def test_create_group(monkeypatch) -> None:
+    user = make_user()
+    view = make_view(user)
+
+    app.dependency_overrides[get_current_user] = (
+        lambda: user
+    )
+    app.dependency_overrides[get_db] = override_db
+
+    monkeypatch.setattr(
+        "app.api.groups.create_group",
+        lambda *args, **kwargs: (
+            view,
+            "test-invite-token",
+        ),
+    )
+
+    response = client.post(
+        "/api/v1/groups",
+        json={
+            "name": "Project group",
+            "date_start": "2026-10-01",
+            "date_end": "2026-10-07",
+            "window_start_minute": 480,
+            "window_end_minute": 1020,
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["slug"] == "7fQ2mXk9Lp3R"
+    assert "invite_url" in response.json()
+
+    app.dependency_overrides.clear()
+
+
+def test_list_groups(monkeypatch) -> None:
+    user = make_user()
+    view = make_view(user)
+
+    app.dependency_overrides[get_current_user] = (
+        lambda: user
+    )
+    app.dependency_overrides[get_db] = override_db
+
+    monkeypatch.setattr(
+        "app.api.groups.list_group_views",
+        lambda *args, **kwargs: ([view], None),
+    )
+
+    response = client.get("/api/v1/groups")
+
+    assert response.status_code == 200
+    assert len(response.json()["data"]) == 1
+    assert response.json()["next_cursor"] is None
+
+    app.dependency_overrides.clear()
+
+
+def test_get_group(monkeypatch) -> None:
+    user = make_user()
+    view = make_view(user)
+
+    app.dependency_overrides[get_current_user] = (
+        lambda: user
+    )
+    app.dependency_overrides[get_db] = override_db
+
+    monkeypatch.setattr(
+        "app.api.groups.get_group_view",
+        lambda *args, **kwargs: view,
+    )
+
+    response = client.get(
+        "/api/v1/groups/7fQ2mXk9Lp3R"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["etag"] == '"1"'
+
+    app.dependency_overrides.clear()
+
+
+def test_patch_group(monkeypatch) -> None:
+    user = make_user()
+    view = make_view(user)
+
+    view.group.name = "Updated"
+    view.group.version = 2
+
+    app.dependency_overrides[get_current_user] = (
+        lambda: user
+    )
+    app.dependency_overrides[get_db] = override_db
+
+    monkeypatch.setattr(
+        "app.api.groups.update_group",
+        lambda *args, **kwargs: view,
+    )
+
+    response = client.patch(
+        "/api/v1/groups/7fQ2mXk9Lp3R",
+        json={"name": "Updated"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Updated"
+    assert response.headers["etag"] == '"2"'
+
+    app.dependency_overrides.clear()
+
+
+def test_delete_group(monkeypatch) -> None:
+    user = make_user()
+
+    app.dependency_overrides[get_current_user] = (
+        lambda: user
+    )
+    app.dependency_overrides[get_db] = override_db
+
+    monkeypatch.setattr(
+        "app.api.groups.delete_group",
+        lambda *args, **kwargs: None,
+    )
+
+    response = client.delete(
+        "/api/v1/groups/7fQ2mXk9Lp3R"
+    )
+
+    assert response.status_code == 204
+
+    app.dependency_overrides.clear()
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("GET", "/api/v1/groups", None),
+        (
+            "POST",
+            "/api/v1/groups",
+            {
+                "name": "Group",
+                "date_start": "2026-10-01",
+                "date_end": "2026-10-02",
+                "window_start_minute": 480,
+                "window_end_minute": 1020,
+            },
+        ),
+        (
+            "GET",
+            "/api/v1/groups/7fQ2mXk9Lp3R",
+            None,
+        ),
+        (
+            "PATCH",
+            "/api/v1/groups/7fQ2mXk9Lp3R",
+            {"name": "Updated"},
+        ),
+        (
+            "DELETE",
+            "/api/v1/groups/7fQ2mXk9Lp3R",
+            None,
+        ),
+    ],
+)
+def test_group_endpoints_require_auth(
+    method: str,
+    path: str,
+    body: dict[str, object] | None,
+) -> None:
+    response = client.request(
+        method,
+        path,
+        json=body,
+    )
+
+    assert response.status_code == 401
