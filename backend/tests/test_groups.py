@@ -5,6 +5,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.dependencies import get_current_user
+from app.domain.suggestions import (
+    SuggestionResult,
+)
 from app.infra.db import get_db
 from app.infra.models.group import (
     Group,
@@ -473,3 +476,68 @@ def test_get_availability_matrix(
     assert response.json()["responded_count"] == 1
 
     app.dependency_overrides.clear()
+
+
+def test_get_suggestions(monkeypatch) -> None:
+    user = make_user()
+
+    app.dependency_overrides[
+        get_current_user
+    ] = lambda: user
+    app.dependency_overrides[
+        get_db
+    ] = override_db
+
+    start = datetime(
+        2026,
+        10,
+        1,
+        8,
+        0,
+        tzinfo=UTC,
+    )
+
+    end = datetime(
+        2026,
+        10,
+        1,
+        9,
+        0,
+        tzinfo=UTC,
+    )
+
+    result = SuggestionResult(
+        start_at=start,
+        end_at=end,
+        score=4.0,
+        available_user_ids=[user.id],
+        preferred_user_ids=[],
+        missing_user_ids=[],
+    )
+
+    monkeypatch.setattr(
+        "app.api.groups.get_suggestions",
+        lambda *args, **kwargs: [result],
+    )
+
+    response = client.get(
+        "/api/v1/groups/"
+        "7fQ2mXk9Lp3R/suggestions"
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()["data"]) == 1
+    assert response.json()["data"][0][
+        "score"
+    ] == 4.0
+
+    app.dependency_overrides.clear()
+
+
+def test_suggestions_require_auth() -> None:
+    response = client.get(
+        "/api/v1/groups/"
+        "7fQ2mXk9Lp3R/suggestions"
+    )
+
+    assert response.status_code == 401

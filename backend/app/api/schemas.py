@@ -209,3 +209,17 @@ class AvailabilityMatrix(BaseModel):
     aggregate: list[SlotAggregate]
     responded_count: int
     member_count: int
+
+
+class SuggestionResponse(BaseModel):
+    start_at: datetime
+    end_at: datetime
+    score: float
+    available_user_ids: list[UUID]
+    preferred_user_ids: list[UUID]
+    missing_user_ids: list[UUID]
+
+
+class SuggestionPageResponse(BaseModel):
+    data: list[SuggestionResponse]
+    next_cursor: str | None = None

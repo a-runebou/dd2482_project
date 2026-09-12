@@ -25,6 +25,8 @@ from app.api.schemas import (
     MemberResponse,
     ParticipantAvailability,
     SlotAggregate,
+    SuggestionPageResponse,
+    SuggestionResponse,
 )
 from app.config import get_settings
 from app.domain.slots import SlotValidationError
@@ -56,6 +58,9 @@ from app.services.memberships import (
     join_group,
     list_members,
     remove_member,
+)
+from app.services.suggestions import (
+    get_suggestions,
 )
 
 router = APIRouter(
@@ -559,4 +564,62 @@ def put_own_availability(
     return AvailabilitySelection(
         available=available,
         preferred=preferred,
+    )
+
+
+
+@router.get(
+    "/{slug}/suggestions",
+    response_model=SuggestionPageResponse,
+)
+def get_group_suggestions(
+    slug: str,
+    duration_minutes: int = Query(
+        default=60,
+        ge=30,
+        le=480,
+        multiple_of=30,
+    ),
+    limit: int = Query(
+        default=5,
+        ge=1,
+        le=20,
+    ),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> SuggestionPageResponse:
+    try:
+        suggestions = get_suggestions(
+            db,
+            slug=slug,
+            user_id=user.id,
+            duration_minutes=duration_minutes,
+            limit=limit,
+        )
+    except GroupNotFound as exc:
+        raise ProblemException(
+            status_code=404,
+            code="group_not_found",
+            title="Group not found",
+        ) from exc
+
+    return SuggestionPageResponse(
+        data=[
+            SuggestionResponse(
+                start_at=item.start_at,
+                end_at=item.end_at,
+                score=item.score,
+                available_user_ids=(
+                    item.available_user_ids
+                ),
+                preferred_user_ids=(
+                    item.preferred_user_ids
+                ),
+                missing_user_ids=(
+                    item.missing_user_ids
+                ),
+            )
+            for item in suggestions
+        ],
+        next_cursor=None,
     )
