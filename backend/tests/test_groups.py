@@ -240,3 +240,95 @@ def test_group_endpoints_require_auth(
     )
 
     assert response.status_code == 401
+
+
+
+def test_join_group(monkeypatch) -> None:
+    user = make_user()
+    view = make_view(user)
+
+    app.dependency_overrides[get_current_user] = (
+        lambda: user
+    )
+    app.dependency_overrides[get_db] = override_db
+
+    monkeypatch.setattr(
+        "app.api.groups.join_group",
+        lambda *args, **kwargs: view,
+    )
+
+    response = client.post(
+        "/api/v1/groups/7fQ2mXk9Lp3R/join",
+        json={
+            "invite_token":
+                "1234567890abcdef"
+        },
+    )
+
+    assert response.status_code == 200
+
+    app.dependency_overrides.clear()
+
+
+def test_list_members(monkeypatch) -> None:
+    user = make_user()
+    now = datetime.now(UTC)
+
+    from app.infra.models.group import Membership
+    from app.services.memberships import MemberView
+
+    membership = Membership(
+        group_id=uuid4(),
+        user_id=user.id,
+        role=MembershipRole.OWNER,
+        notify_email=True,
+        joined_at=now,
+    )
+
+    member = MemberView(
+        membership=membership,
+        user=user,
+        responded=False,
+    )
+
+    app.dependency_overrides[get_current_user] = (
+        lambda: user
+    )
+    app.dependency_overrides[get_db] = override_db
+
+    monkeypatch.setattr(
+        "app.api.groups.list_members",
+        lambda *args, **kwargs: [member],
+    )
+
+    response = client.get(
+        "/api/v1/groups/7fQ2mXk9Lp3R/members"
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()["data"]) == 1
+
+    app.dependency_overrides.clear()
+
+
+def test_remove_member(monkeypatch) -> None:
+    user = make_user()
+
+    app.dependency_overrides[get_current_user] = (
+        lambda: user
+    )
+    app.dependency_overrides[get_db] = override_db
+
+    monkeypatch.setattr(
+        "app.api.groups.remove_member",
+        lambda *args, **kwargs: None,
+    )
+
+    response = client.delete(
+        f"/api/v1/groups/7fQ2mXk9Lp3R"
+        f"/members/{uuid4()}"
+    )
+
+    assert response.status_code == 204
+
+    app.dependency_overrides.clear()

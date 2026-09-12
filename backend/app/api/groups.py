@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -16,6 +18,9 @@ from app.api.schemas import (
     GroupPatch,
     GroupResponse,
     GroupWithInviteResponse,
+    JoinRequest,
+    MemberPageResponse,
+    MemberResponse,
 )
 from app.config import get_settings
 from app.domain.slots import SlotValidationError
@@ -33,6 +38,14 @@ from app.services.groups import (
     get_group_view,
     list_group_views,
     update_group,
+)
+from app.services.memberships import (
+    AlreadyMember,
+    ForbiddenMemberAction,
+    MemberLimitReached,
+    join_group,
+    list_members,
+    remove_member,
 )
 
 router = APIRouter(
@@ -274,6 +287,120 @@ def remove_group(
     except Exception as exc:
         raise_group_error(exc)
         raise
+
+    return Response(
+        status_code=status.HTTP_204_NO_CONTENT
+    )
+
+
+@router.post(
+    "/{slug}/join",
+    response_model=GroupResponse,
+)
+def post_join_group(
+    slug: str,
+    body: JoinRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> GroupResponse:
+    try:
+        view = join_group(
+            db,
+            slug=slug,
+            user=user,
+            invite_token=body.invite_token,
+        )
+    except GroupNotFound as exc:
+        raise ProblemException(
+            status_code=404,
+            code="group_not_found",
+            title="Group not found",
+        ) from exc
+    except AlreadyMember as exc:
+        raise ProblemException(
+            status_code=409,
+            code="already_member",
+            title="Already a member",
+        ) from exc
+    except MemberLimitReached as exc:
+        raise ProblemException(
+            status_code=409,
+            code="member_limit_reached",
+            title="Member limit reached",
+        ) from exc
+
+    return group_response(view)
+
+
+@router.get(
+    "/{slug}/members",
+    response_model=MemberPageResponse,
+)
+def get_members(
+    slug: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> MemberPageResponse:
+    try:
+        members = list_members(
+            db,
+            slug=slug,
+            caller_id=user.id,
+        )
+    except Exception as exc:
+        raise_group_error(exc)
+        raise
+
+    return MemberPageResponse(
+        data=[
+            MemberResponse(
+                user_id=member.user.id,
+                display_name=(
+                    member.user.display_name
+                    or "User"
+                ),
+                role=member.membership.role.value,
+                responded=member.responded,
+                notify_email=(
+                    member.membership.notify_email
+                ),
+                joined_at=member.membership.joined_at,
+            )
+            for member in members
+        ],
+        next_cursor=None,
+    )
+
+
+@router.delete(
+    "/{slug}/members/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_member(
+    slug: str,
+    user_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    try:
+        remove_member(
+            db,
+            slug=slug,
+            caller_id=user.id,
+            target_user_id=user_id,
+        )
+    except GroupNotFound as exc:
+        raise ProblemException(
+            status_code=404,
+            code="group_not_found",
+            title="Group not found",
+        ) from exc
+    except ForbiddenMemberAction as exc:
+        raise ProblemException(
+            status_code=403,
+            code="forbidden",
+            title="Forbidden",
+        ) from exc
 
     return Response(
         status_code=status.HTTP_204_NO_CONTENT

@@ -156,3 +156,24 @@ class GroupWithInviteResponse(GroupResponse):
 class GroupPageResponse(BaseModel):
     data: list[GroupResponse]
     next_cursor: str | None
+
+
+class JoinRequest(BaseModel):
+    invite_token: str = Field(
+        min_length=16,
+        max_length=64,
+    )
+
+
+class MemberResponse(BaseModel):
+    user_id: UUID
+    display_name: str
+    role: Literal["owner", "member"]
+    responded: bool
+    notify_email: bool | None = None
+    joined_at: datetime
+
+
+class MemberPageResponse(BaseModel):
+    data: list[MemberResponse]
+    next_cursor: str | None = None
