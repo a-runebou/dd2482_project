@@ -4,6 +4,7 @@ import { RootErrorBoundary } from "./RootErrorBoundary";
 import { HomePage } from "../pages/HomePage";
 import { GroupsPage } from "../pages/GroupsPage";
 import { CreateGroupPage } from "../pages/CreateGroupPage";
+import { SignInPage } from "../pages/SignInPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 
 /**
@@ -20,6 +21,7 @@ export const appRoutes: RouteObject[] = [
       { index: true, element: <HomePage /> },
       { path: "groups", element: <GroupsPage /> },
       { path: "groups/new", element: <CreateGroupPage /> },
+      { path: "sign-in", element: <SignInPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],
   },

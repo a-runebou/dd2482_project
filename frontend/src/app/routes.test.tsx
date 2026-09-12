@@ -126,4 +126,23 @@ describe("routing", () => {
     ).toBeInTheDocument();
     expect(requestCount).toBe(1);
   });
+
+  it("renders the Sign in heading at /sign-in after boot", async () => {
+    renderApp(appRoutes, ["/sign-in"]);
+
+    expect(
+      await screen.findByRole("heading", { name: "Sign in" }),
+    ).toBeInTheDocument();
+    expect(await screen.findByLabelText("Email address")).toBeInTheDocument();
+  });
+
+  it("navigates to /sign-in from the link on the home page", async () => {
+    renderApp(appRoutes, ["/"]);
+
+    fireEvent.click(await screen.findByRole("link", { name: "Sign in" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Sign in" }),
+    ).toBeInTheDocument();
+  });
 });

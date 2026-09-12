@@ -7,6 +7,9 @@ export function HomePage() {
       <Link className="mt-4 inline-block underline" to="/groups">
         Your groups
       </Link>
+      <Link className="mt-4 block underline" to="/sign-in">
+        Sign in
+      </Link>
     </>
   );
 }

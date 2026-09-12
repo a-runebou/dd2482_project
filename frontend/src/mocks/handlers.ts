@@ -35,4 +35,10 @@ export const handlers = [
     const body = (await request.json()) as components["schemas"]["GroupCreate"];
     return HttpResponse.json(createdGroupFixture(body), { status: 201 });
   }),
+  // Always 202, whatever the address, matching the contract's reason for never disclosing
+  // whether an account exists.
+  http.post(
+    mockUrl("/auth/magic-link"),
+    () => new HttpResponse(null, { status: 202 }),
+  ),
 ];
