@@ -136,7 +136,7 @@ def list_members(
     result: list[MemberView] = []
 
     for membership, user in rows:
-        availability_count = db.scalar(
+        _ = db.scalar(
             select(func.count())
             .select_from(Availability)
             .where(
@@ -152,7 +152,8 @@ def list_members(
                 membership=membership,
                 user=user,
                 responded=bool(
-                    int(availability_count or 0)
+                    membership.availability_submitted_at
+                    is not None
                 ),
             )
         )

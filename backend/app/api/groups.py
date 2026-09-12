@@ -13,6 +13,8 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_current_user
 from app.api.errors import ProblemException
 from app.api.schemas import (
+    AvailabilityMatrix,
+    AvailabilitySelection,
     GroupCreate,
     GroupPageResponse,
     GroupPatch,
@@ -21,11 +23,19 @@ from app.api.schemas import (
     JoinRequest,
     MemberPageResponse,
     MemberResponse,
+    ParticipantAvailability,
+    SlotAggregate,
 )
 from app.config import get_settings
 from app.domain.slots import SlotValidationError
 from app.infra.db import get_db
 from app.infra.models.user import User
+from app.services.availability import (
+    GroupConfirmed,
+    get_availability_matrix,
+    get_my_availability,
+    put_my_availability,
+)
 from app.services.groups import (
     GroupLimitReached,
     GroupNotFound,
@@ -404,4 +414,149 @@ def delete_member(
 
     return Response(
         status_code=status.HTTP_204_NO_CONTENT
+    )
+
+
+@router.get(
+    "/{slug}/availability",
+    response_model=AvailabilityMatrix,
+)
+def get_group_availability(
+    slug: str,
+    response: Response,
+    if_none_match: str | None = Header(
+        default=None,
+        alias="If-None-Match",
+    ),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AvailabilityMatrix | Response:
+    try:
+        matrix = get_availability_matrix(
+            db,
+            slug=slug,
+            user_id=user.id,
+        )
+    except GroupNotFound as exc:
+        raise ProblemException(
+            status_code=404,
+            code="group_not_found",
+            title="Group not found",
+        ) from exc
+
+    etag = etag_for(matrix.version)
+
+    if if_none_match == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+        )
+
+    response.headers["ETag"] = etag
+
+    return AvailabilityMatrix(
+        version=matrix.version,
+        slots=matrix.slots,
+        participants=[
+            ParticipantAvailability(
+                user_id=participant.user_id,
+                display_name=(
+                    participant.display_name
+                ),
+                responded=participant.responded,
+                available=participant.available,
+                preferred=participant.preferred,
+            )
+            for participant in matrix.participants
+        ],
+        aggregate=[
+            SlotAggregate(
+                slot_index=item.slot_index,
+                available_count=(
+                    item.available_count
+                ),
+                preferred_count=(
+                    item.preferred_count
+                ),
+            )
+            for item in matrix.aggregate
+        ],
+        responded_count=matrix.responded_count,
+        member_count=matrix.member_count,
+    )
+
+
+@router.get(
+    "/{slug}/availability/me",
+    response_model=AvailabilitySelection,
+)
+def get_own_availability(
+    slug: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AvailabilitySelection:
+    try:
+        available, preferred = get_my_availability(
+            db,
+            slug=slug,
+            user_id=user.id,
+        )
+    except GroupNotFound as exc:
+        raise ProblemException(
+            status_code=404,
+            code="group_not_found",
+            title="Group not found",
+        ) from exc
+
+    return AvailabilitySelection(
+        available=available,
+        preferred=preferred,
+    )
+
+
+@router.put(
+    "/{slug}/availability/me",
+    response_model=AvailabilitySelection,
+)
+def put_own_availability(
+    slug: str,
+    body: AvailabilitySelection,
+    response: Response,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AvailabilitySelection:
+    try:
+        available, preferred, version = (
+            put_my_availability(
+                db,
+                slug=slug,
+                user_id=user.id,
+                available=body.available,
+                preferred=body.preferred,
+            )
+        )
+    except GroupNotFound as exc:
+        raise ProblemException(
+            status_code=404,
+            code="group_not_found",
+            title="Group not found",
+        ) from exc
+    except GroupConfirmed as exc:
+        raise ProblemException(
+            status_code=409,
+            code="group_confirmed",
+            title="Group confirmed",
+        ) from exc
+    except SlotValidationError as exc:
+        raise ProblemException(
+            status_code=422,
+            code="slot_not_in_window",
+            title="Slot not in window",
+            detail=str(exc),
+        ) from exc
+
+    response.headers["ETag"] = etag_for(version)
+
+    return AvailabilitySelection(
+        available=available,
+        preferred=preferred,
     )

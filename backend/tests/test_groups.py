@@ -13,6 +13,11 @@ from app.infra.models.group import (
 )
 from app.infra.models.user import User
 from app.main import app
+from app.services.availability import (
+    AggregateData,
+    MatrixData,
+    ParticipantData,
+)
 from app.services.groups import GroupView
 
 client = TestClient(app)
@@ -330,5 +335,141 @@ def test_remove_member(monkeypatch) -> None:
     )
 
     assert response.status_code == 204
+
+    app.dependency_overrides.clear()
+
+
+
+def test_get_my_availability(monkeypatch) -> None:
+    user = make_user()
+
+    app.dependency_overrides[get_current_user] = (
+        lambda: user
+    )
+    app.dependency_overrides[get_db] = override_db
+
+    slot = datetime(
+        2026,
+        10,
+        1,
+        8,
+        0,
+        tzinfo=UTC,
+    )
+
+    monkeypatch.setattr(
+        "app.api.groups.get_my_availability",
+        lambda *args, **kwargs: ([slot], []),
+    )
+
+    response = client.get(
+        "/api/v1/groups/"
+        "7fQ2mXk9Lp3R/availability/me"
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()["available"]) == 1
+
+    app.dependency_overrides.clear()
+
+
+def test_put_my_availability(monkeypatch) -> None:
+    user = make_user()
+
+    app.dependency_overrides[get_current_user] = (
+        lambda: user
+    )
+    app.dependency_overrides[get_db] = override_db
+
+    slot = datetime(
+        2026,
+        10,
+        1,
+        8,
+        0,
+        tzinfo=UTC,
+    )
+
+    monkeypatch.setattr(
+        "app.api.groups.put_my_availability",
+        lambda *args, **kwargs: (
+            [slot],
+            [],
+            2,
+        ),
+    )
+
+    response = client.put(
+        "/api/v1/groups/"
+        "7fQ2mXk9Lp3R/availability/me",
+        json={
+            "available": [
+                "2026-10-01T08:00:00Z"
+            ],
+            "preferred": [],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["etag"] == '"2"'
+
+    app.dependency_overrides.clear()
+
+
+def test_get_availability_matrix(
+    monkeypatch,
+) -> None:
+    user = make_user()
+
+    app.dependency_overrides[get_current_user] = (
+        lambda: user
+    )
+    app.dependency_overrides[get_db] = override_db
+
+    slot = datetime(
+        2026,
+        10,
+        1,
+        8,
+        0,
+        tzinfo=UTC,
+    )
+
+    matrix = MatrixData(
+        version=1,
+        slots=[slot],
+        participants=[
+            ParticipantData(
+                user_id=user.id,
+                display_name="Alex",
+                responded=True,
+                available=[0],
+                preferred=[],
+            )
+        ],
+        aggregate=[
+            AggregateData(
+                slot_index=0,
+                available_count=1,
+                preferred_count=0,
+            )
+        ],
+        responded_count=1,
+        member_count=1,
+    )
+
+    monkeypatch.setattr(
+        "app.api.groups.get_availability_matrix",
+        lambda *args, **kwargs: matrix,
+    )
+
+    response = client.get(
+        "/api/v1/groups/"
+        "7fQ2mXk9Lp3R/availability"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["member_count"] == 1
+    assert response.json()["responded_count"] == 1
 
     app.dependency_overrides.clear()

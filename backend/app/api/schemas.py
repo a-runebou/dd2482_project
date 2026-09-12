@@ -177,3 +177,35 @@ class MemberResponse(BaseModel):
 class MemberPageResponse(BaseModel):
     data: list[MemberResponse]
     next_cursor: str | None = None
+
+
+class AvailabilitySelection(BaseModel):
+    available: list[datetime] = Field(
+        max_length=1488,
+    )
+    preferred: list[datetime] = Field(
+        max_length=1488,
+    )
+
+
+class ParticipantAvailability(BaseModel):
+    user_id: UUID
+    display_name: str
+    responded: bool
+    available: list[int]
+    preferred: list[int]
+
+
+class SlotAggregate(BaseModel):
+    slot_index: int
+    available_count: int
+    preferred_count: int
+
+
+class AvailabilityMatrix(BaseModel):
+    version: int
+    slots: list[datetime]
+    participants: list[ParticipantAvailability]
+    aggregate: list[SlotAggregate]
+    responded_count: int
+    member_count: int
