@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
@@ -69,3 +69,143 @@ class SessionResponse(BaseModel):
     token_type: Literal["Bearer"] = "Bearer"
     expires_in: int
     user: UserResponse
+
+
+class GroupCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    description: str | None = Field(
+        default=None,
+        max_length=1000,
+    )
+    timezone: str = "Europe/Stockholm"
+    date_start: date
+    date_end: date
+    window_start_minute: int = Field(
+        ge=0,
+        le=1410,
+        multiple_of=30,
+    )
+    window_end_minute: int = Field(
+        ge=30,
+        le=1440,
+        multiple_of=30,
+    )
+
+
+class GroupPatch(BaseModel):
+    name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+    )
+    description: str | None = Field(
+        default=None,
+        max_length=1000,
+    )
+    timezone: str | None = None
+    date_start: date | None = None
+    date_end: date | None = None
+    window_start_minute: int | None = Field(
+        default=None,
+        ge=0,
+        le=1410,
+        multiple_of=30,
+    )
+    window_end_minute: int | None = Field(
+        default=None,
+        ge=30,
+        le=1440,
+        multiple_of=30,
+    )
+    rotate_invite_token: bool | None = None
+    rotate_feed_token: bool | None = None
+
+    @model_validator(mode="after")
+    def require_at_least_one_group_field(self) -> "GroupPatch":
+        if not self.model_fields_set:
+            raise ValueError("At least one field must be provided")
+
+        return self
+
+
+class GroupResponse(BaseModel):
+    slug: str
+    name: str
+    description: str | None = None
+    owner_id: UUID
+    timezone: str
+    date_start: date
+    date_end: date
+    window_start_minute: int
+    window_end_minute: int
+    slot_minutes: Literal[30]
+    state: Literal["open", "confirmed", "archived"]
+    confirmed_proposal: dict[str, object] | None = None
+    member_count: int
+    my_role: Literal["owner", "member"] | None = None
+    feed_url: str | None = None
+    version: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class GroupWithInviteResponse(GroupResponse):
+    invite_url: str
+
+
+class GroupPageResponse(BaseModel):
+    data: list[GroupResponse]
+    next_cursor: str | None
+
+
+class JoinRequest(BaseModel):
+    invite_token: str = Field(
+        min_length=16,
+        max_length=64,
+    )
+
+
+class MemberResponse(BaseModel):
+    user_id: UUID
+    display_name: str
+    role: Literal["owner", "member"]
+    responded: bool
+    notify_email: bool | None = None
+    joined_at: datetime
+
+
+class MemberPageResponse(BaseModel):
+    data: list[MemberResponse]
+    next_cursor: str | None = None
+
+
+class AvailabilitySelection(BaseModel):
+    available: list[datetime] = Field(
+        max_length=1488,
+    )
+    preferred: list[datetime] = Field(
+        max_length=1488,
+    )
+
+
+class ParticipantAvailability(BaseModel):
+    user_id: UUID
+    display_name: str
+    responded: bool
+    available: list[int]
+    preferred: list[int]
+
+
+class SlotAggregate(BaseModel):
+    slot_index: int
+    available_count: int
+    preferred_count: int
+
+
+class AvailabilityMatrix(BaseModel):
+    version: int
+    slots: list[datetime]
+    participants: list[ParticipantAvailability]
+    aggregate: list[SlotAggregate]
+    responded_count: int
+    member_count: int

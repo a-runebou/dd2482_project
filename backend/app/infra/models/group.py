@@ -193,3 +193,10 @@ class Membership(Base):
         DateTime(timezone=True),
         nullable=False,
     )
+
+    availability_submitted_at: Mapped[
+        datetime | None
+    ] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
