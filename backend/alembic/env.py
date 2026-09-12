@@ -18,6 +18,7 @@ if config.config_file_name is not None:
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
 
+import app.infra.models  # noqa: F401
 from app.config import get_settings
 from app.infra.db import Base
 
@@ -27,8 +28,6 @@ config.set_main_option(
     "sqlalchemy.url",
     settings.database_url,
 )
-
-import app.infra.models  # noqa: F401
 
 target_metadata = Base.metadata
 

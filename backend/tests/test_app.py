@@ -5,7 +5,6 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.main import app
 
-
 client = TestClient(app)
 
 def test_healthz() -> None:
