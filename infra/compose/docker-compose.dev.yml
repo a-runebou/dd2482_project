@@ -10,6 +10,10 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://schedular:schedular@postgres:5432/schedular
       ENVIRONMENT: development
+      JWT_SECRET: ${JWT_SECRET}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE}
+      BUILD_SHA: ${BUILD_SHA}
 
     ports:
       - "8000:8000"
