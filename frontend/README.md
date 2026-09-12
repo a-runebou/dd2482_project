@@ -25,6 +25,8 @@ Node.js 24 or later (see `.nvmrc`).
 
 `npm run dev:mock` runs the app against an MSW service worker in the browser, so the frontend works with no backend. It uses `vite --mode mock`, which loads `.env.mock` and sets `VITE_API_MOCKING=enabled`; the worker starts only when that flag is `enabled` and only in a development build, so production bundles contain no mock code. Plain `npm run dev` leaves mocking off, so the app shows its normal boot-failure state until a real backend answers `GET /api/v1/config`.
 
+`npm run dev` forwards `/api` requests to a backend expected at `http://localhost:8000` (the contract's local server). Without a backend running, the application displays its failure state, allowing you to verify error handling. `npm run dev:mock` requires no backend.
+
 Two environment variables control this (see `.env.example`):
 
 - `VITE_API_BASE_URL` — override the API base URL; unset means the relative `/api/v1` path on the app's own origin.
