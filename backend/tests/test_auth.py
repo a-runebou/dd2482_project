@@ -105,3 +105,30 @@ def test_create_session_rejects_invalid_magic_link(monkeypatch) -> None:
     assert response.json()["code"] == "unauthenticated"
 
     app.dependency_overrides.clear()
+
+
+def test_refresh_without_cookie_returns_401() -> None:
+    response = client.post("/api/v1/auth/refresh")
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "unauthenticated"
+
+
+def test_logout_returns_204(monkeypatch) -> None:
+    app.dependency_overrides[get_db] = override_get_db
+
+    mock_logout = MagicMock()
+
+    monkeypatch.setattr(
+        "app.api.auth.logout_session",
+        mock_logout,
+    )
+
+    response = client.delete(
+        "/api/v1/auth/session",
+        cookies={"refresh_token": "test-token"},
+    )
+
+    assert response.status_code == 204
+
+    app.dependency_overrides.clear()

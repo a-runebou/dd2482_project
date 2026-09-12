@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -137,3 +137,103 @@ def create_session(
         refresh_token=raw_refresh_token,
         user=user,
     )
+
+
+class InvalidRefreshToken(Exception):
+    pass
+
+
+def refresh_session(
+    db: Session,
+    raw_token: str,
+) -> CreatedSession:
+    settings = get_settings()
+
+    now = datetime.now(UTC)
+    token_hash = hash_token(raw_token)
+
+    stored_token = db.scalar(
+        select(RefreshToken).where(
+            RefreshToken.token_hash == token_hash,
+        )
+    )
+
+    if stored_token is None:
+        raise InvalidRefreshToken
+
+    if stored_token.revoked_at is not None:
+        db.execute(
+            update(RefreshToken)
+            .where(
+                RefreshToken.family_id == stored_token.family_id,
+            )
+            .values(revoked_at=now)
+        )
+
+        db.commit()
+
+        raise InvalidRefreshToken
+
+    if stored_token.expires_at <= now:
+        stored_token.revoked_at = now
+        db.commit()
+        raise InvalidRefreshToken
+
+    user = db.get(User, stored_token.user_id)
+
+    if user is None:
+        raise InvalidRefreshToken
+
+    stored_token.revoked_at = now
+
+    new_raw_token = generate_token()
+
+    new_refresh_token = RefreshToken(
+        id=new_uuid(),
+        user_id=user.id,
+        token_hash=hash_token(new_raw_token),
+        family_id=stored_token.family_id,
+        expires_at=now
+        + timedelta(days=settings.refresh_token_ttl_days),
+        revoked_at=None,
+    )
+
+    db.add(new_refresh_token)
+    db.commit()
+
+    return CreatedSession(
+        access_token=create_access_token(user.id),
+        refresh_token=new_raw_token,
+        user=user,
+    )
+
+
+def logout_session(
+    db: Session,
+    raw_token: str | None,
+) -> None:
+    if raw_token is None:
+        return
+
+    token_hash = hash_token(raw_token)
+
+    stored_token = db.scalar(
+        select(RefreshToken).where(
+            RefreshToken.token_hash == token_hash,
+        )
+    )
+
+    if stored_token is None:
+        return
+
+    now = datetime.now(UTC)
+
+    db.execute(
+        update(RefreshToken)
+        .where(
+            RefreshToken.family_id == stored_token.family_id,
+        )
+        .values(revoked_at=now)
+    )
+
+    db.commit()
