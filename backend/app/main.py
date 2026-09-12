@@ -1,7 +1,11 @@
+from typing import cast
+
 from fastapi import FastAPI, Response, status
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
+from starlette.types import ExceptionHandler
 
+from app.api.errors import ProblemException, problem_exception_handler
 from app.api.router import api_router
 from app.infra.db import engine
 
@@ -9,6 +13,11 @@ app = FastAPI(title="Schedular API")
 app.include_router(
     api_router,
     prefix="/api/v1"
+)
+
+app.add_exception_handler(
+    ProblemException,
+    cast(ExceptionHandler, problem_exception_handler),
 )
 
 @app.get("/healthz")

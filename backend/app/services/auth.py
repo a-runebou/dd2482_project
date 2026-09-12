@@ -4,9 +4,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.domain.auth import generate_token, hash_token, new_uuid
+from app.domain.auth import create_access_token, generate_token, hash_token, new_uuid
 from app.infra.models.job import Job
-from app.infra.models.user import MagicLink, User
+from app.infra.models.user import MagicLink, RefreshToken, User
 
 
 def request_magic_link(
@@ -71,3 +71,69 @@ def request_magic_link(
     db.add(magic_link)
     db.add(job)
     db.commit()
+
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class CreatedSession:
+    access_token: str
+    refresh_token: str
+    user: User
+
+
+class InvalidMagicLink(Exception):
+    pass
+
+
+def create_session(
+    db: Session,
+    token: str,
+) -> CreatedSession:
+    settings = get_settings()
+
+    now = datetime.now(UTC)
+    token_hash = hash_token(token)
+
+    magic_link = db.scalar(
+        select(MagicLink).where(
+            MagicLink.token_hash == token_hash,
+        )
+    )
+
+    if (
+        magic_link is None
+        or magic_link.consumed_at is not None
+        or magic_link.expires_at <= now
+    ):
+        raise InvalidMagicLink
+
+    user = db.get(User, magic_link.user_id)
+
+    if user is None:
+        raise InvalidMagicLink
+
+    magic_link.consumed_at = now
+
+    raw_refresh_token = generate_token()
+    family_id = new_uuid()
+
+    refresh_token = RefreshToken(
+        id=new_uuid(),
+        user_id=user.id,
+        token_hash=hash_token(raw_refresh_token),
+        family_id=family_id,
+        expires_at=now
+        + timedelta(days=settings.refresh_token_ttl_days),
+        revoked_at=None,
+    )
+
+    db.add(refresh_token)
+    db.commit()
+
+    return CreatedSession(
+        access_token=create_access_token(user.id),
+        refresh_token=raw_refresh_token,
+        user=user,
+    )

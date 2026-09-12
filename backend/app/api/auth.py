@@ -1,9 +1,20 @@
 from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
 
-from app.api.schemas import MagicLinkRequest
+from app.api.errors import ProblemException
+from app.api.schemas import (
+    MagicLinkRequest,
+    SessionCreateRequest,
+    SessionResponse,
+    UserResponse,
+)
+from app.config import get_settings
 from app.infra.db import get_db
-from app.services.auth import request_magic_link
+from app.services.auth import (
+    InvalidMagicLink,
+    create_session,
+    request_magic_link,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -23,3 +34,52 @@ def create_magic_link(
     )
 
     return Response(status_code=status.HTTP_202_ACCEPTED)
+
+
+@router.post(
+    "/session",
+    response_model=SessionResponse,
+)
+def post_session(
+    body: SessionCreateRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> SessionResponse:
+    settings = get_settings()
+
+    try:
+        session = create_session(
+            db=db,
+            token=body.token,
+        )
+    except InvalidMagicLink as exc:
+        raise ProblemException(
+            status_code=401,
+            code="unauthenticated",
+            title="Unauthenticated",
+            detail="The magic link is invalid, expired or already used.",
+        ) from exc
+
+    response.set_cookie(
+        key="refresh_token",
+        value=session.refresh_token,
+        max_age=settings.refresh_token_ttl_days * 24 * 60 * 60,
+        httponly=True,
+        secure=settings.auth_cookie_secure,
+        samesite="lax",
+        path="/api/v1/auth",
+    )
+
+    user = session.user
+
+    return SessionResponse(
+        access_token=session.access_token,
+        expires_in=settings.access_token_ttl_seconds,
+        user=UserResponse(
+            id=user.id,
+            email=user.email,
+            display_name=user.display_name or "User",
+            timezone=user.timezone,
+            created_at=user.created_at,
+        ),
+    )
