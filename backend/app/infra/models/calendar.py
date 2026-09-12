@@ -35,7 +35,12 @@ class CalendarSource(Base):
     )
 
     kind: Mapped[CalendarSourceKind] = mapped_column(
-        Enum(CalendarSourceKind, name="calendar_source_kind"),
+        Enum(
+            CalendarSourceKind,
+            name="calendar_source_kind",
+            native_enum=False,
+            create_constraint=True,
+        ),
         nullable=False,
     )
 
@@ -45,7 +50,12 @@ class CalendarSource(Base):
     )
 
     status: Mapped[CalendarSourceStatus] = mapped_column(
-        Enum(CalendarSourceStatus, name="calendar_source_status"),
+        Enum(
+            CalendarSourceStatus,
+            name="calendar_source_status",
+            native_enum=False,
+            create_constraint=True,
+        ),
         nullable=False,
     )
 

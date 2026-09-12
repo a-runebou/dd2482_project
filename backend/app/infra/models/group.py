@@ -92,19 +92,14 @@ class Group(Base):
     )
 
     state: Mapped[GroupState] = mapped_column(
-        Enum(GroupState, name="group_state"),
+        Enum(
+            GroupState,
+            name="group_state",
+            native_enum=False,
+            create_constraint=True,
+        ),
         nullable=False,
         default=GroupState.OPEN,
-    )
-
-    confirmed_proposal_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey(
-            "proposals.id",
-            use_alter=True,
-            name="fk_groups_confirmed_proposal",
-        ),
-        nullable=True,
     )
 
     invite_token_hash: Mapped[str] = mapped_column(
@@ -135,6 +130,10 @@ class Group(Base):
 
     __table_args__ = (
         CheckConstraint(
+            "date_start <= date_end",
+            name="ck_groups_date_range",
+        ),
+        CheckConstraint(
             "window_start_minute >= 0 AND window_start_minute <= 1440",
             name="ck_groups_window_start_range",
         ),
@@ -147,11 +146,11 @@ class Group(Base):
             name="ck_groups_window_order",
         ),
         CheckConstraint(
-            "window_start_minute % 30 = 0",
+            "mod(window_start_minute, 30) = 0",
             name="ck_groups_window_start_alignment",
         ),
         CheckConstraint(
-            "window_end_minute % 30 = 0",
+            "mod(window_end_minute, 30) = 0",
             name="ck_groups_window_end_alignment",
         ),
         CheckConstraint(
@@ -175,7 +174,12 @@ class Membership(Base):
     )
 
     role: Mapped[MembershipRole] = mapped_column(
-        Enum(MembershipRole, name="membership_role"),
+        Enum(
+            MembershipRole,
+            name="membership_role",
+            native_enum=False,
+            create_constraint=True,
+        ),
         nullable=False,
     )
 

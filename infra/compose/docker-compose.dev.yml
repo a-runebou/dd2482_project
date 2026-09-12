@@ -1,32 +1,35 @@
 services:
-  postgres:
-    image: postgres:16
-
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-    ports:
-      - "5432:5432"
-
   backend:
     build:
       context: ../../backend
-
-    environment:
-      ENVIRONMENT: ${ENVIRONMENT}
-      DATABASE_URL: ${DATABASE_URL}
-
-    ports:
-      - "8000:8000"
+      dockerfile: Dockerfile
 
     depends_on:
       - postgres
 
+    environment:
+      DATABASE_URL: postgresql+psycopg://schedular:schedular@postgres:5432/schedular
+      ENVIRONMENT: development
+
+    ports:
+      - "8000:8000"
+
+    volumes:
+      - ../../backend:/app
+
+  postgres:
+    image: postgres:16
+
+    environment:
+      POSTGRES_DB: schedular
+      POSTGRES_USER: schedular
+      POSTGRES_PASSWORD: schedular
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
 
 volumes:
   postgres_data:

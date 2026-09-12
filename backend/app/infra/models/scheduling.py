@@ -2,7 +2,14 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
-from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -44,7 +51,12 @@ class Availability(Base):
     )
 
     state: Mapped[AvailabilityState] = mapped_column(
-        Enum(AvailabilityState, name="availability_state"),
+        Enum(
+            AvailabilityState,
+            name="availability_state",
+            native_enum=False,
+            create_constraint=True,
+        ),
         nullable=False,
     )
 
@@ -74,7 +86,12 @@ class Proposal(Base):
     )
 
     origin: Mapped[ProposalOrigin] = mapped_column(
-        Enum(ProposalOrigin, name="proposal_origin"),
+        Enum(
+            ProposalOrigin,
+            name="proposal_origin",
+            native_enum=False,
+            create_constraint=True,
+        ),
         nullable=False,
     )
 
@@ -88,10 +105,21 @@ class Proposal(Base):
         nullable=False,
     )
 
+    confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
     __table_args__ = (
         CheckConstraint(
             "end_at > start_at",
             name="ck_proposals_positive_duration",
+        ),
+        Index(
+            "uq_proposals_one_confirmed_per_group",
+            "group_id",
+            unique=True,
+            postgresql_where=text("confirmed_at IS NOT NULL"),
         ),
     )
 
@@ -110,6 +138,11 @@ class Vote(Base):
     )
 
     value: Mapped[VoteValue] = mapped_column(
-        Enum(VoteValue, name="vote_value"),
+        Enum(
+            VoteValue,
+            name="vote_value",
+            native_enum=False,
+            create_constraint=True,
+        ),
         nullable=False,
     )
