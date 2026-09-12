@@ -21,6 +21,8 @@ edit it.
 | C5 | Minor contract and documentation inconsistencies | open | Nothing |
 | C6 | No error codes for resource limits | open | Nothing; limit errors show a generic failure |
 | C7 | Field format in validation_failed errors is unspecified | open | Nothing; unmatched entries show at form level |
+| C8 | No error code for an internal server error | open | Nothing; 500s show a generic failure |
+| C9 | Frontend expects the backend at BACKEND_ORIGIN behind one origin | open | Nothing; affects compose and Kubernetes wiring |
 
 ---
 
@@ -58,7 +60,13 @@ The two origins must also be same-site, or the `Lax` refresh cookie is never sen
 
 Frontend meanwhile: proceeds against mocks.
 
-Response:
+Response (Adrian, 2026-09-12, decided unilaterally as Alexander was unreachable and the
+backup-foundation branch contains no CORS or auth implementation): single origin. The frontend
+image serves the SPA and proxies /api to BACKEND_ORIGIN (decision F15), so the backend needs no
+CORS middleware and no expose-headers configuration in any environment. If CORS middleware is
+already present in main.py, remove it rather than configure it. ARCHITECTURE.md D11 and section
+10 are to be updated to describe a single origin. Alexander to comply or to raise an objection
+before implementing auth.
 
 ---
 
@@ -84,7 +92,12 @@ Alternative. Store `redirect_path` with the magic link and return it as an optio
 
 Frontend meanwhile: the sign-in request page proceeds; the post-sign-in redirect waits.
 
-Response:
+Response (Adrian, 2026-09-12, as above): the mail link carries the redirect as a query parameter,
+{PUBLIC_APP_URL}/auth/callback?token=<token>&redirect=<redirect_path>. redirect_path is validated
+server-side against the existing pattern in MagicLinkRequest before it goes into the mail, and the
+frontend validates it again as a relative path before navigating. No OpenAPI change; ARCHITECTURE
+section 6.1 is to be updated. Rejected the alternative of returning redirect_path in
+SessionResponse, because it widens the contract for no gain.
 
 ---
 
@@ -114,7 +127,12 @@ the window, revoke as specified. Trade-off: theft detection is weaker inside the
 Frontend meanwhile: the in-memory token store and the single-flight logic proceed; refresh does
 not ship until this is agreed.
 
-Response:
+Response (Adrian, 2026-09-12, as above): implement a 30-second grace window. Reuse of the
+immediately preceding refresh token within that window returns 401 unauthenticated without
+revoking the family; outside it, revoke the family as specified. Without this, two open browser
+tabs sign the user out, which is a demonstration-breaking failure. No OpenAPI change;
+ARCHITECTURE section 6.1 is to be updated. The frontend additionally serialises refreshes per tab
+and across tabs.
 
 ---
 
@@ -146,7 +164,11 @@ should decide what a 500 body carries.
 Frontend meanwhile: unaffected; the schemathesis run in the contract CI job should catch
 violations.
 
-Response:
+Response (Adrian, 2026-09-12, as above): not a choice but a conformance requirement. Every error
+response must be application/problem+json carrying type, title, status and code, with code drawn
+from ErrorCode. This means overriding FastAPI's default handlers for request validation (returning
+400 validation_failed, not 422), for 404 and 405, and for unhandled exceptions. A new code for
+internal errors is needed; see C8.
 
 ---
 
@@ -214,5 +236,47 @@ for a top-level field, and a dotted path for a nested one, for example `events.0
 change is needed beyond the description.
 
 Frontend meanwhile: matches on exact equality and shows the rest at form level.
+
+Response:
+---
+
+## C8. No error code for an internal server error
+
+- Raised: 2026-09-12
+- Status: open
+- Contract change: yes, one enum value
+- Documents affected: `contracts/openapi.yaml`, ARCHITECTURE.md section 7.4
+
+Problem. `ErrorCode` has no member for an unhandled server error, so a conformant 500 cannot be
+produced at all. C4 requires every error to carry a code from the enum.
+
+Proposal. Add `internal_error`, used for 500 only. The frontend maps it to its generic branch, so
+no frontend change is needed once it exists.
+
+Frontend meanwhile: a 500 without a conformant body is classified as `unexpected` and shows a
+generic failure with a retry button. Nothing breaks.
+
+Response:
+
+---
+
+## C9. The frontend container expects a single origin
+
+- Raised: 2026-09-12
+- Status: open
+- Contract change: none
+- Documents affected: ARCHITECTURE.md section 4, `infra/compose/`
+
+Consequence of the C1 decision, recorded so the compose and Kubernetes wiring match.
+
+The frontend image (see `frontend/Dockerfile`) serves the SPA on port 8080 as a non-root user and
+proxies every `/api` request to the value of `BACKEND_ORIGIN`, defaulting to
+`http://backend:8000`. The request path is passed through unchanged, so `/api/v1/config` reaches
+the backend as `/api/v1/config`. The image answers `/healthz` itself, without touching the
+backend.
+
+What this needs from the dev compose stack: a `backend` service reachable under that name on port
+8000, and the frontend published on 8080. No CORS configuration, and no browser-facing backend
+port. The backend still needs its own `/healthz` and `/readyz` for its own checks.
 
 Response:
