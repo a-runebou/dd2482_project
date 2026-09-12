@@ -1,3 +1,9 @@
+from app.infra.models.calendar import (
+    BusyBlock,
+    CalendarSource,
+    CalendarSourceKind,
+    CalendarSourceStatus,
+)
 from app.infra.models.group import Group, GroupState, Membership, MembershipRole
 from app.infra.models.scheduling import (
     Availability,
@@ -12,6 +18,10 @@ from app.infra.models.user import MagicLink, RefreshToken, User
 __all__ = [
     "Availability",
     "AvailabilityState",
+    "BusyBlock",
+    "CalendarSource",
+    "CalendarSourceKind",
+    "CalendarSourceStatus",
     "Group",
     "GroupState",
     "MagicLink",
