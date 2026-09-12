@@ -1,6 +1,8 @@
 import { http, HttpResponse } from "msw";
+import type { components } from "../api/generated/schema";
 import {
   configFixture,
+  createdGroupFixture,
   groupsPage1Fixture,
   groupsPage2Fixture,
   validationFailedProblem,
@@ -26,5 +28,11 @@ export const handlers = [
       status: 400,
       headers: { "Content-Type": "application/problem+json" },
     });
+  }),
+  // Creation succeeds and echoes the submitted body. The list fixtures are static, so a created
+  // group never appears in GET /groups; that is deliberate, not a cache bug.
+  http.post(mockUrl("/groups"), async ({ request }) => {
+    const body = (await request.json()) as components["schemas"]["GroupCreate"];
+    return HttpResponse.json(createdGroupFixture(body), { status: 201 });
   }),
 ];

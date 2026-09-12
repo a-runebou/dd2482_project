@@ -9,3 +9,4 @@
 2026-09-11 | dev-mocks-and-test-hygiene | Opus 4.8 | Added a dev-only MSW browser worker (npm run dev:mock) tree-shaken from production, made handlers/tests match the real base URL via mockUrl, centralised afterEach(cleanup) in setup.ts, and confirmed test files are type-checked.
 2026-09-11 | groups-list | Sonnet 5 | Added a /groups route with a paginated, MSW-proven groups list (loading, empty, owner/member/role-absent rendering, and distinct first-page vs later-page vs background-refetch error states via a new shared ApiErrorNotice component).
 2026-09-12 | dev-api-proxy | Haiku 4.5 | Added Vite proxy configuration forwarding /api to localhost:8000 with before/after status-code evidence.
+2026-09-12 | create-group-form | Opus 5 | Added /groups/new with a config-driven create-group form (per-body idempotency keys, field-level and form-level server errors, clipboard-optional one-time invite link) and fixed the missing refresh-error notice on an empty groups list.

@@ -20,6 +20,7 @@ edit it.
 | C4 | Error bodies must match the Problem schema | open | Nothing; non-conforming errors degrade to a generic failure |
 | C5 | Minor contract and documentation inconsistencies | open | Nothing |
 | C6 | No error codes for resource limits | open | Nothing; limit errors show a generic failure |
+| C7 | Field format in validation_failed errors is unspecified | open | Nothing; unmatched entries show at form level |
 
 ---
 
@@ -190,5 +191,28 @@ Proposal. Add `group_limit_reached`, `proposal_limit_reached` and
 `limit_reached` code would also work, but it tells the user less.
 
 Frontend meanwhile: these cases show a generic failure.
+
+Response:
+
+---
+
+## C7. Field format in validation_failed errors is unspecified
+
+- Raised: 2026-09-12
+- Status: open
+- Contract change: no, a description only
+- Documents affected: `contracts/openapi.yaml`, schema `Problem`
+
+Problem. `Problem.errors[].field` is typed as a plain string, with no stated format. The frontend
+attaches a message to a form field by matching this value against the request property name, so
+`name` works, while `body.name` or `body -> name` (FastAPI's default shape) does not. Anything
+unmatched is shown at form level instead, so nothing is lost, but the message lands away from the
+field it concerns.
+
+Proposal. Document the format in the schema description and stick to it: the bare property name
+for a top-level field, and a dotted path for a nested one, for example `events.0.name`. No schema
+change is needed beyond the description.
+
+Frontend meanwhile: matches on exact equality and shows the rest at form level.
 
 Response:

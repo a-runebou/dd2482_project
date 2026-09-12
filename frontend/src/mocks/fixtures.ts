@@ -117,3 +117,37 @@ export const validationFailedProblem: components["schemas"]["Problem"] = {
   detail: "Unknown cursor.",
   code: "validation_failed",
 };
+
+// The group POST /groups invents. Slug matches the contract's base58 pattern; the invite token
+// is 32 characters, the shortest the task allows, so a test asserting a minimum is meaningful.
+export const createdGroupSlug = "5kW8rFj4Qz7X";
+export const createdGroupInviteToken = "n7Qw2vK9pR4tYs6bZ1cM3dH5gJ8kL0xA";
+
+/**
+ * A GroupWithInvite echoing what the caller asked for, with the server-owned fields the client
+ * cannot know. The invite URL has the shape ARCHITECTURE 6.5 defines and points at the frontend
+ * origin, not the API.
+ */
+export function createdGroupFixture(
+  body: components["schemas"]["GroupCreate"],
+): components["schemas"]["GroupWithInvite"] {
+  return {
+    slug: createdGroupSlug,
+    name: body.name,
+    description: body.description ?? null,
+    owner_id: "b6e1d1d0-1f0a-4a3b-8c2e-555555555555",
+    timezone: body.timezone ?? "Europe/Stockholm",
+    date_start: body.date_start,
+    date_end: body.date_end,
+    window_start_minute: body.window_start_minute,
+    window_end_minute: body.window_end_minute,
+    slot_minutes: 30,
+    state: "open",
+    member_count: 1,
+    my_role: "owner",
+    version: 1,
+    created_at: "2026-09-12T09:00:00Z",
+    updated_at: "2026-09-12T09:00:00Z",
+    invite_url: `${globalThis.location.origin}/join/${createdGroupSlug}?invite=${createdGroupInviteToken}`,
+  };
+}

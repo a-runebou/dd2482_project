@@ -3,6 +3,7 @@ import { RootLayout } from "./RootLayout";
 import { RootErrorBoundary } from "./RootErrorBoundary";
 import { HomePage } from "../pages/HomePage";
 import { GroupsPage } from "../pages/GroupsPage";
+import { CreateGroupPage } from "../pages/CreateGroupPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 
 /**
@@ -18,6 +19,7 @@ export const appRoutes: RouteObject[] = [
     children: [
       { index: true, element: <HomePage /> },
       { path: "groups", element: <GroupsPage /> },
+      { path: "groups/new", element: <CreateGroupPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],
   },

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
+import { Link } from "react-router";
 import { ApiErrorNotice } from "../../components/ApiErrorNotice";
 import { formatDateRange } from "../../lib/date";
 import { groupsInfiniteQueryOptions } from "./queries";
@@ -52,12 +53,8 @@ export function GroupsList() {
 
   const groups = query.data.pages.flatMap((page) => page.data);
 
-  if (groups.length === 0) {
-    return <p className="mt-4">You are not in any groups yet.</p>;
-  }
-
-  // Data exists, so the list always renders. A failed page fetch or a failed background refetch
-  // is shown below it, never in place of it.
+  // Data exists, so the list (or the empty state) always renders. A failed page fetch or a
+  // failed background refetch is shown below it, never in place of it.
   let notice: ReactNode = null;
   if (query.isFetchNextPageError && query.error) {
     notice = (
@@ -78,6 +75,18 @@ export function GroupsList() {
         }}
         isRetrying={query.isFetching}
       />
+    );
+  }
+
+  if (groups.length === 0) {
+    return (
+      <div className="mt-4">
+        <p>You are not in any groups yet.</p>
+        <Link to="/groups/new" className="mt-2 inline-block underline">
+          Create a group
+        </Link>
+        {notice}
+      </div>
     );
   }
 

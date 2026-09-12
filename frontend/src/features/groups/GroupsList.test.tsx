@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { http, HttpResponse } from "msw";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router";
 import { server } from "../../mocks/server";
 import { mockUrl } from "../../mocks/urls";
 import {
@@ -18,7 +19,9 @@ function renderGroupsList() {
   const client = createQueryClient();
   render(
     <QueryClientProvider client={client}>
-      <GroupsList />
+      <MemoryRouter>
+        <GroupsList />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
   return client;
@@ -104,7 +107,38 @@ describe("GroupsList", () => {
     expect(
       await screen.findByText("You are not in any groups yet."),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Create a group" }),
+    ).toHaveAttribute("href", "/groups/new");
     expect(requestCount).toBe(1);
+  });
+
+  it("shows a retryable notice when a background refresh fails on an empty list", async () => {
+    server.resetHandlers();
+    server.use(
+      http.get(mockUrl("/groups"), () => {
+        requestCount += 1;
+        // The first load is an empty list; every refresh afterwards fails. Both the refetch and
+        // createQueryClient's automatic single network retry must fail to reach the error state.
+        if (requestCount === 1) {
+          return HttpResponse.json({ data: [], next_cursor: null });
+        }
+        return HttpResponse.error();
+      }),
+    );
+
+    const client = renderGroupsList();
+    await screen.findByText("You are not in any groups yet.");
+
+    await client.refetchQueries({ queryKey: ["groups", "list"] });
+
+    const alert = await screen.findByRole("alert", {}, NETWORK_TIMEOUT);
+    expect(alert).toHaveTextContent(/could not reach the server/i);
+    // The empty state stays: a failed refresh must not be mistaken for a list that vanished.
+    expect(
+      screen.getByText("You are not in any groups yet."),
+    ).toBeInTheDocument();
+    expect(requestCount).toBe(3);
   });
 
   it("shows the sign-in message for a 401 unauthenticated problem on the first page", async () => {

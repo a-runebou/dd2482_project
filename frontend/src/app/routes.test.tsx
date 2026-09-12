@@ -75,6 +75,36 @@ describe("routing", () => {
     expect(requestCount).toBe(1);
   });
 
+  it("renders the Create a group heading at /groups/new after boot", async () => {
+    renderApp(appRoutes, ["/groups/new"]);
+
+    expect(
+      await screen.findByRole("heading", { name: "Create a group" }),
+    ).toBeInTheDocument();
+    expect(await screen.findByLabelText("Group name")).toBeInTheDocument();
+  });
+
+  it("navigates to /groups/new from the link on the groups page", async () => {
+    let requestCount = 0;
+    server.use(
+      http.get(mockUrl("/groups"), () => {
+        requestCount += 1;
+        return HttpResponse.json(groupsPage1Fixture);
+      }),
+    );
+
+    renderApp(appRoutes, ["/groups"]);
+
+    fireEvent.click(
+      await screen.findByRole("link", { name: "Create a group" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Create a group" }),
+    ).toBeInTheDocument();
+    expect(requestCount).toBe(1);
+  });
+
   it("navigates to /groups from the home page link", async () => {
     let requestCount = 0;
     server.use(
