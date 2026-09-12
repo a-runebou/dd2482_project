@@ -10,3 +10,4 @@
 2026-09-11 | groups-list | Sonnet 5 | Added a /groups route with a paginated, MSW-proven groups list (loading, empty, owner/member/role-absent rendering, and distinct first-page vs later-page vs background-refetch error states via a new shared ApiErrorNotice component).
 2026-09-12 | dev-api-proxy | Haiku 4.5 | Added Vite proxy configuration forwarding /api to localhost:8000 with before/after status-code evidence.
 2026-09-12 | create-group-form | Opus 5 | Added /groups/new with a config-driven create-group form (per-body idempotency keys, field-level and form-level server errors, clipboard-optional one-time invite link) and fixed the missing refresh-error notice on an empty groups list.
+2026-09-12 | frontend-container-image | Sonnet 5 | Added a multi-stage Dockerfile (Node 24 build, nginxinc/nginx-unprivileged runtime) serving the SPA with an index.html fallback and templated /api proxy to BACKEND_ORIGIN, unverified as Docker is unavailable in this session.

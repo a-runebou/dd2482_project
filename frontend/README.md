@@ -31,3 +31,22 @@ Two environment variables control this (see `.env.example`):
 
 - `VITE_API_BASE_URL` — override the API base URL; unset means the relative `/api/v1` path on the app's own origin.
 - `VITE_API_MOCKING` — set to `enabled` to turn on the browser mock worker in development.
+
+## Container image
+
+Build the production image from `frontend/`:
+
+```
+docker build -t schedular-frontend:dev .
+```
+
+Run it with the backend's address supplied at container start (never at build time):
+
+```
+docker run --rm -p 8080:8080 -e BACKEND_ORIGIN=http://host.docker.internal:8000 schedular-frontend:dev
+```
+
+`BACKEND_ORIGIN` defaults to `http://backend:8000` (the in-cluster service name) when unset. The
+image contains no build-time API configuration: it bakes in no `VITE_API_BASE_URL` and no backend
+address, so the same image is deployable to any environment by setting `BACKEND_ORIGIN` alone. See
+`docs/frontend/DECISIONS.md` F15.
