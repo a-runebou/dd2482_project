@@ -1,9 +1,9 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import DateTime, ForeignKey, Index, String, func
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infra.db import Base
 
@@ -18,14 +18,12 @@ class User(Base):
 
     email: Mapped[str] = mapped_column(
         String(320),
-        unique=True,
         nullable=False,
-        index=True,
     )
 
-    display_name: Mapped[str] = mapped_column(
+    display_name: Mapped[str | None] = mapped_column(
         String(100),
-        nullable=False,
+        nullable=True,
     )
 
     timezone: Mapped[str] = mapped_column(
@@ -38,15 +36,12 @@ class User(Base):
         nullable=False,
     )
 
-    magic_links: Mapped[list["MagicLink"]] = relationship(
-        back_populates="user",
-        cascade="all, delete-orphan",
-    )
 
-    refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
-        back_populates="user",
-        cascade="all, delete-orphan",
-    )
+Index(
+    "uq_users_email_lower",
+    func.lower(User.email),
+    unique=True,
+)
 
 
 class MagicLink(Base):
@@ -77,10 +72,6 @@ class MagicLink(Base):
     consumed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
-    )
-
-    user: Mapped["User"] = relationship(
-        back_populates="magic_links",
     )
 
 
@@ -118,8 +109,4 @@ class RefreshToken(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
-    )
-
-    user: Mapped["User"] = relationship(
-        back_populates="refresh_tokens",
     )

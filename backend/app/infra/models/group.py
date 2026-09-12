@@ -4,6 +4,7 @@ from uuid import UUID
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     Enum,
@@ -38,8 +39,8 @@ class Group(Base):
 
     slug: Mapped[str] = mapped_column(
         String(12),
-        unique=True,
         nullable=False,
+        unique=True,
         index=True,
     )
 
@@ -56,6 +57,7 @@ class Group(Base):
     owner_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id"),
         nullable=False,
+        index=True,
     )
 
     timezone: Mapped[str] = mapped_column(
@@ -124,6 +126,33 @@ class Group(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "window_start_minute >= 0 AND window_start_minute <= 1440",
+            name="ck_groups_window_start_range",
+        ),
+        CheckConstraint(
+            "window_end_minute >= 0 AND window_end_minute <= 1440",
+            name="ck_groups_window_end_range",
+        ),
+        CheckConstraint(
+            "window_start_minute < window_end_minute",
+            name="ck_groups_window_order",
+        ),
+        CheckConstraint(
+            "window_start_minute % 30 = 0",
+            name="ck_groups_window_start_alignment",
+        ),
+        CheckConstraint(
+            "window_end_minute % 30 = 0",
+            name="ck_groups_window_end_alignment",
+        ),
+        CheckConstraint(
+            "slot_minutes = 30",
+            name="ck_groups_slot_minutes",
+        ),
     )
 
 
