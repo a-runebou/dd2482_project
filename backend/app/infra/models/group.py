@@ -99,6 +99,11 @@ class Group(Base):
 
     confirmed_proposal_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
+        ForeignKey(
+            "proposals.id",
+            use_alter=True,
+            name="fk_groups_confirmed_proposal",
+        ),
         nullable=True,
     )
 
