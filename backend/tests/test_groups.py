@@ -5,11 +5,19 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.dependencies import get_current_user
+from app.domain.suggestions import (
+    SuggestionResult,
+)
 from app.infra.db import get_db
 from app.infra.models.group import (
     Group,
     GroupState,
     MembershipRole,
+)
+from app.infra.models.scheduling import (
+    Proposal,
+    ProposalOrigin,
+    VoteValue,
 )
 from app.infra.models.user import User
 from app.main import app
@@ -19,6 +27,7 @@ from app.services.availability import (
     ParticipantData,
 )
 from app.services.groups import GroupView
+from app.services.proposals import ProposalView
 
 client = TestClient(app)
 
@@ -471,5 +480,246 @@ def test_get_availability_matrix(
     assert response.status_code == 200
     assert response.json()["member_count"] == 1
     assert response.json()["responded_count"] == 1
+
+    app.dependency_overrides.clear()
+
+
+def test_get_suggestions(monkeypatch) -> None:
+    user = make_user()
+
+    app.dependency_overrides[
+        get_current_user
+    ] = lambda: user
+    app.dependency_overrides[
+        get_db
+    ] = override_db
+
+    start = datetime(
+        2026,
+        10,
+        1,
+        8,
+        0,
+        tzinfo=UTC,
+    )
+
+    end = datetime(
+        2026,
+        10,
+        1,
+        9,
+        0,
+        tzinfo=UTC,
+    )
+
+    result = SuggestionResult(
+        start_at=start,
+        end_at=end,
+        score=4.0,
+        available_user_ids=[user.id],
+        preferred_user_ids=[],
+        missing_user_ids=[],
+    )
+
+    monkeypatch.setattr(
+        "app.api.groups.get_suggestions",
+        lambda *args, **kwargs: [result],
+    )
+
+    response = client.get(
+        "/api/v1/groups/"
+        "7fQ2mXk9Lp3R/suggestions"
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()["data"]) == 1
+    assert response.json()["data"][0][
+        "score"
+    ] == 4.0
+
+    app.dependency_overrides.clear()
+
+
+def test_suggestions_require_auth() -> None:
+    response = client.get(
+        "/api/v1/groups/"
+        "7fQ2mXk9Lp3R/suggestions"
+    )
+
+    assert response.status_code == 401
+
+
+def make_proposal_view(
+    user: User,
+) -> ProposalView:
+    proposal = Proposal(
+        id=uuid4(),
+        group_id=uuid4(),
+        start_at=datetime(
+            2026,
+            10,
+            1,
+            8,
+            0,
+            tzinfo=UTC,
+        ),
+        end_at=datetime(
+            2026,
+            10,
+            1,
+            9,
+            0,
+            tzinfo=UTC,
+        ),
+        origin=ProposalOrigin.MANUAL,
+        created_by=user.id,
+        created_at=datetime.now(
+            UTC
+        ),
+    )
+
+    return ProposalView(
+        proposal=proposal,
+        yes=[],
+        maybe=[],
+        no=[],
+        my_vote=None,
+    )
+
+def test_put_vote(monkeypatch) -> None:
+    user = make_user()
+    proposal = make_proposal_view(user)
+
+    proposal = ProposalView(
+        proposal=proposal.proposal,
+        yes=[user.id],
+        maybe=[],
+        no=[],
+        my_vote=VoteValue.YES,
+    )
+
+    app.dependency_overrides[
+        get_current_user
+    ] = lambda: user
+    app.dependency_overrides[
+        get_db
+    ] = override_db
+
+    monkeypatch.setattr(
+        "app.api.groups.put_vote",
+        lambda *args, **kwargs: proposal,
+    )
+
+    response = client.put(
+        "/api/v1/groups/"
+        f"7fQ2mXk9Lp3R/proposals/"
+        f"{proposal.proposal.id}/vote/me",
+        json={"value": "yes"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["my_vote"] == "yes"
+    assert user.id.hex in (
+        response.text.replace("-", "")
+    )
+
+    app.dependency_overrides.clear()
+
+
+def test_delete_vote(monkeypatch) -> None:
+    user = make_user()
+    proposal_id = uuid4()
+
+    app.dependency_overrides[
+        get_current_user
+    ] = lambda: user
+    app.dependency_overrides[
+        get_db
+    ] = override_db
+
+    monkeypatch.setattr(
+        "app.api.groups.delete_vote",
+        lambda *args, **kwargs: None,
+    )
+
+    response = client.delete(
+        "/api/v1/groups/"
+        f"7fQ2mXk9Lp3R/proposals/"
+        f"{proposal_id}/vote/me"
+    )
+
+    assert response.status_code == 204
+
+    app.dependency_overrides.clear()
+
+
+def test_confirm_group(monkeypatch) -> None:
+    user = make_user()
+    view = make_view(user)
+
+    view.group.state = GroupState.CONFIRMED
+    view.group.confirmed_proposal_id = uuid4()
+    view.group.version = 2
+
+    app.dependency_overrides[
+        get_current_user
+    ] = lambda: user
+    app.dependency_overrides[
+        get_db
+    ] = override_db
+
+    monkeypatch.setattr(
+        "app.api.groups.confirm_group",
+        lambda *args, **kwargs: view,
+    )
+
+    response = client.post(
+        "/api/v1/groups/"
+        "7fQ2mXk9Lp3R/confirmation",
+        json={
+            "proposal_id": str(
+                view.group.confirmed_proposal_id
+            ),
+            "send_reminders": True,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["state"] == (
+        "confirmed"
+    )
+    assert response.json()["version"] == 2
+
+    app.dependency_overrides.clear()
+
+
+def test_unconfirm_group(monkeypatch) -> None:
+    user = make_user()
+    view = make_view(user)
+
+    view.group.state = GroupState.OPEN
+    view.group.confirmed_proposal_id = None
+    view.group.version = 3
+
+    app.dependency_overrides[
+        get_current_user
+    ] = lambda: user
+    app.dependency_overrides[
+        get_db
+    ] = override_db
+
+    monkeypatch.setattr(
+        "app.api.groups.unconfirm_group",
+        lambda *args, **kwargs: view,
+    )
+
+    response = client.delete(
+        "/api/v1/groups/"
+        "7fQ2mXk9Lp3R/confirmation"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["state"] == "open"
+    assert response.json()["version"] == 3
 
     app.dependency_overrides.clear()

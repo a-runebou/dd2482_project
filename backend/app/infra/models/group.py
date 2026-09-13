@@ -102,6 +102,11 @@ class Group(Base):
         default=GroupState.OPEN,
     )
 
+    confirmed_proposal_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        nullable=True,
+    )
+
     invite_token_hash: Mapped[str] = mapped_column(
         String(128),
         nullable=False,

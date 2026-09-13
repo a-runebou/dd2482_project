@@ -15,6 +15,7 @@ from app.api.errors import ProblemException
 from app.api.schemas import (
     AvailabilityMatrix,
     AvailabilitySelection,
+    ConfirmationRequest,
     GroupCreate,
     GroupPageResponse,
     GroupPatch,
@@ -24,17 +25,30 @@ from app.api.schemas import (
     MemberPageResponse,
     MemberResponse,
     ParticipantAvailability,
+    ProposalResponse,
+    ProposalVotes,
     SlotAggregate,
+    SuggestionPageResponse,
+    SuggestionResponse,
+    VoteInput,
 )
 from app.config import get_settings
 from app.domain.slots import SlotValidationError
 from app.infra.db import get_db
+from app.infra.models.scheduling import (
+    VoteValue,
+)
 from app.infra.models.user import User
 from app.services.availability import (
-    GroupConfirmed,
     get_availability_matrix,
     get_my_availability,
     put_my_availability,
+)
+from app.services.confirmation import (
+    AlreadyConfirmed,
+    NotConfirmed,
+    confirm_group,
+    unconfirm_group,
 )
 from app.services.groups import (
     GroupLimitReached,
@@ -56,6 +70,19 @@ from app.services.memberships import (
     join_group,
     list_members,
     remove_member,
+)
+from app.services.proposals import (
+    GroupConfirmed as ProposalGroupConfirmed,
+)
+from app.services.proposals import (
+    ProposalLimitReached,
+    ProposalNotFound,
+    ProposalView,
+    delete_vote,
+    put_vote,
+)
+from app.services.suggestions import (
+    get_suggestions,
 )
 
 router = APIRouter(
@@ -540,11 +567,11 @@ def put_own_availability(
             code="group_not_found",
             title="Group not found",
         ) from exc
-    except GroupConfirmed as exc:
+    except ProposalLimitReached as exc:
         raise ProblemException(
-            status_code=409,
-            code="group_confirmed",
-            title="Group confirmed",
+            status_code=400,
+            code="validation_failed",
+            title="Proposal limit reached",
         ) from exc
     except SlotValidationError as exc:
         raise ProblemException(
@@ -560,3 +587,249 @@ def put_own_availability(
         available=available,
         preferred=preferred,
     )
+
+
+
+@router.get(
+    "/{slug}/suggestions",
+    response_model=SuggestionPageResponse,
+)
+def get_group_suggestions(
+    slug: str,
+    duration_minutes: int = Query(
+        default=60,
+        ge=30,
+        le=480,
+        multiple_of=30,
+    ),
+    limit: int = Query(
+        default=5,
+        ge=1,
+        le=20,
+    ),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> SuggestionPageResponse:
+    try:
+        suggestions = get_suggestions(
+            db,
+            slug=slug,
+            user_id=user.id,
+            duration_minutes=duration_minutes,
+            limit=limit,
+        )
+    except GroupNotFound as exc:
+        raise ProblemException(
+            status_code=404,
+            code="group_not_found",
+            title="Group not found",
+        ) from exc
+
+    return SuggestionPageResponse(
+        data=[
+            SuggestionResponse(
+                start_at=item.start_at,
+                end_at=item.end_at,
+                score=item.score,
+                available_user_ids=(
+                    item.available_user_ids
+                ),
+                preferred_user_ids=(
+                    item.preferred_user_ids
+                ),
+                missing_user_ids=(
+                    item.missing_user_ids
+                ),
+            )
+            for item in suggestions
+        ],
+        next_cursor=None,
+    )
+
+
+
+
+
+def proposal_response(
+    view: ProposalView,
+) -> ProposalResponse:
+    proposal = view.proposal
+
+    return ProposalResponse(
+        id=proposal.id,
+        start_at=proposal.start_at,
+        end_at=proposal.end_at,
+        origin=proposal.origin.value,
+        created_by=proposal.created_by,
+        votes=ProposalVotes(
+            yes=view.yes,
+            maybe=view.maybe,
+            no=view.no,
+        ),
+        my_vote=(
+            view.my_vote.value
+            if view.my_vote is not None
+            else None
+        ),
+        created_at=proposal.created_at,
+    )
+
+
+
+@router.put(
+    "/{slug}/proposals/{proposal_id}/vote/me",
+    response_model=ProposalResponse,
+)
+def put_my_vote(
+    slug: str,
+    proposal_id: UUID,
+    body: VoteInput,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ProposalResponse:
+    try:
+        proposal = put_vote(
+            db,
+            slug=slug,
+            user_id=user.id,
+            proposal_id=proposal_id,
+            value=VoteValue(body.value),
+        )
+    except (
+        GroupNotFound,
+        ProposalNotFound,
+    ) as exc:
+        raise ProblemException(
+            status_code=404,
+            code="not_found",
+            title="Not found",
+        ) from exc
+    except ProposalGroupConfirmed as exc:
+        raise ProblemException(
+            status_code=409,
+            code="group_confirmed",
+            title="Group confirmed",
+        ) from exc
+
+    return proposal_response(proposal)
+
+
+@router.delete(
+    "/{slug}/proposals/{proposal_id}/vote/me",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_my_vote(
+    slug: str,
+    proposal_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    try:
+        delete_vote(
+            db,
+            slug=slug,
+            user_id=user.id,
+            proposal_id=proposal_id,
+        )
+    except (
+        GroupNotFound,
+        ProposalNotFound,
+    ) as exc:
+        raise ProblemException(
+            status_code=404,
+            code="not_found",
+            title="Not found",
+        ) from exc
+    except ProposalGroupConfirmed as exc:
+        raise ProblemException(
+            status_code=409,
+            code="group_confirmed",
+            title="Group confirmed",
+        ) from exc
+
+    return Response(
+        status_code=status.HTTP_204_NO_CONTENT
+    )
+
+
+
+@router.post(
+    "/{slug}/confirmation",
+    response_model=GroupResponse,
+)
+def post_confirmation(
+    slug: str,
+    body: ConfirmationRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> GroupResponse:
+    try:
+        view = confirm_group(
+            db,
+            slug=slug,
+            user_id=user.id,
+            proposal_id=body.proposal_id,
+            send_reminders=(
+                body.send_reminders
+            ),
+        )
+    except NotOwner as exc:
+        raise ProblemException(
+            status_code=403,
+            code="not_owner",
+            title="Owner access required",
+        ) from exc
+    except (
+        GroupNotFound,
+        ProposalNotFound,
+    ) as exc:
+        raise ProblemException(
+            status_code=404,
+            code="not_found",
+            title="Not found",
+        ) from exc
+    except AlreadyConfirmed as exc:
+        raise ProblemException(
+            status_code=409,
+            code="group_confirmed",
+            title="Group already confirmed",
+        ) from exc
+
+    return group_response(view)
+
+
+@router.delete(
+    "/{slug}/confirmation",
+    response_model=GroupResponse,
+)
+def delete_confirmation(
+    slug: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> GroupResponse:
+    try:
+        view = unconfirm_group(
+            db,
+            slug=slug,
+            user_id=user.id,
+        )
+    except NotOwner as exc:
+        raise ProblemException(
+            status_code=403,
+            code="not_owner",
+            title="Owner access required",
+        ) from exc
+    except GroupNotFound as exc:
+        raise ProblemException(
+            status_code=404,
+            code="group_not_found",
+            title="Group not found",
+        ) from exc
+    except NotConfirmed as exc:
+        raise ProblemException(
+            status_code=409,
+            code="validation_failed",
+            title="Group is not confirmed",
+        ) from exc
+
+    return group_response(view)

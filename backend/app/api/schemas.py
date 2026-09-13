@@ -209,3 +209,65 @@ class AvailabilityMatrix(BaseModel):
     aggregate: list[SlotAggregate]
     responded_count: int
     member_count: int
+
+
+class SuggestionResponse(BaseModel):
+    start_at: datetime
+    end_at: datetime
+    score: float
+    available_user_ids: list[UUID]
+    preferred_user_ids: list[UUID]
+    missing_user_ids: list[UUID]
+
+
+class SuggestionPageResponse(BaseModel):
+    data: list[SuggestionResponse]
+    next_cursor: str | None = None
+
+
+
+class ProposalCreate(BaseModel):
+    start_at: datetime
+    end_at: datetime
+    origin: Literal[
+        "suggested",
+        "manual",
+    ] = "manual"
+
+
+class ProposalVotes(BaseModel):
+    yes: list[UUID]
+    maybe: list[UUID]
+    no: list[UUID]
+
+
+class ProposalResponse(BaseModel):
+    id: UUID
+    start_at: datetime
+    end_at: datetime
+    origin: Literal[
+        "suggested",
+        "manual",
+    ]
+    created_by: UUID
+    votes: ProposalVotes
+    my_vote: Literal[
+        "yes",
+        "maybe",
+        "no",
+    ] | None = None
+    created_at: datetime
+
+
+class ProposalPageResponse(BaseModel):
+    data: list[ProposalResponse]
+    next_cursor: str | None = None
+
+
+class VoteInput(BaseModel):
+    value: Literal["yes", "maybe", "no"]
+
+
+class ConfirmationRequest(BaseModel):
+    proposal_id: UUID
+    send_reminders: bool = True
