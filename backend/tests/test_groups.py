@@ -14,6 +14,10 @@ from app.infra.models.group import (
     GroupState,
     MembershipRole,
 )
+from app.infra.models.scheduling import (
+    Proposal,
+    ProposalOrigin,
+)
 from app.infra.models.user import User
 from app.main import app
 from app.services.availability import (
@@ -22,6 +26,7 @@ from app.services.availability import (
     ParticipantData,
 )
 from app.services.groups import GroupView
+from app.services.proposals import ProposalView
 
 client = TestClient(app)
 
@@ -541,3 +546,42 @@ def test_suggestions_require_auth() -> None:
     )
 
     assert response.status_code == 401
+
+
+def make_proposal_view(
+    user: User,
+) -> ProposalView:
+    proposal = Proposal(
+        id=uuid4(),
+        group_id=uuid4(),
+        start_at=datetime(
+            2026,
+            10,
+            1,
+            8,
+            0,
+            tzinfo=UTC,
+        ),
+        end_at=datetime(
+            2026,
+            10,
+            1,
+            9,
+            0,
+            tzinfo=UTC,
+        ),
+        origin=ProposalOrigin.MANUAL,
+        created_by=user.id,
+        created_at=datetime.now(
+            UTC
+        ),
+    )
+
+    return ProposalView(
+        proposal=proposal,
+        yes=[],
+        maybe=[],
+        no=[],
+        my_vote=None,
+    )
+

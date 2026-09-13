@@ -24,6 +24,8 @@ from app.api.schemas import (
     MemberPageResponse,
     MemberResponse,
     ParticipantAvailability,
+    ProposalResponse,
+    ProposalVotes,
     SlotAggregate,
     SuggestionPageResponse,
     SuggestionResponse,
@@ -33,7 +35,6 @@ from app.domain.slots import SlotValidationError
 from app.infra.db import get_db
 from app.infra.models.user import User
 from app.services.availability import (
-    GroupConfirmed,
     get_availability_matrix,
     get_my_availability,
     put_my_availability,
@@ -58,6 +59,10 @@ from app.services.memberships import (
     join_group,
     list_members,
     remove_member,
+)
+from app.services.proposals import (
+    ProposalLimitReached,
+    ProposalView,
 )
 from app.services.suggestions import (
     get_suggestions,
@@ -545,11 +550,11 @@ def put_own_availability(
             code="group_not_found",
             title="Group not found",
         ) from exc
-    except GroupConfirmed as exc:
+    except ProposalLimitReached as exc:
         raise ProblemException(
-            status_code=409,
-            code="group_confirmed",
-            title="Group confirmed",
+            status_code=400,
+            code="validation_failed",
+            title="Proposal limit reached",
         ) from exc
     except SlotValidationError as exc:
         raise ProblemException(
@@ -622,4 +627,32 @@ def get_group_suggestions(
             for item in suggestions
         ],
         next_cursor=None,
+    )
+
+
+
+
+
+def proposal_response(
+    view: ProposalView,
+) -> ProposalResponse:
+    proposal = view.proposal
+
+    return ProposalResponse(
+        id=proposal.id,
+        start_at=proposal.start_at,
+        end_at=proposal.end_at,
+        origin=proposal.origin.value,
+        created_by=proposal.created_by,
+        votes=ProposalVotes(
+            yes=view.yes,
+            maybe=view.maybe,
+            no=view.no,
+        ),
+        my_vote=(
+            view.my_vote.value
+            if view.my_vote is not None
+            else None
+        ),
+        created_at=proposal.created_at,
     )

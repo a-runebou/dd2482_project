@@ -223,3 +223,42 @@ class SuggestionResponse(BaseModel):
 class SuggestionPageResponse(BaseModel):
     data: list[SuggestionResponse]
     next_cursor: str | None = None
+
+
+
+class ProposalCreate(BaseModel):
+    start_at: datetime
+    end_at: datetime
+    origin: Literal[
+        "suggested",
+        "manual",
+    ] = "manual"
+
+
+class ProposalVotes(BaseModel):
+    yes: list[UUID]
+    maybe: list[UUID]
+    no: list[UUID]
+
+
+class ProposalResponse(BaseModel):
+    id: UUID
+    start_at: datetime
+    end_at: datetime
+    origin: Literal[
+        "suggested",
+        "manual",
+    ]
+    created_by: UUID
+    votes: ProposalVotes
+    my_vote: Literal[
+        "yes",
+        "maybe",
+        "no",
+    ] | None = None
+    created_at: datetime
+
+
+class ProposalPageResponse(BaseModel):
+    data: list[ProposalResponse]
+    next_cursor: str | None = None
