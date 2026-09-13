@@ -17,6 +17,7 @@ from app.infra.models.group import (
 from app.infra.models.scheduling import (
     Proposal,
     ProposalOrigin,
+    VoteValue,
 )
 from app.infra.models.user import User
 from app.main import app
@@ -585,3 +586,68 @@ def make_proposal_view(
         my_vote=None,
     )
 
+def test_put_vote(monkeypatch) -> None:
+    user = make_user()
+    proposal = make_proposal_view(user)
+
+    proposal = ProposalView(
+        proposal=proposal.proposal,
+        yes=[user.id],
+        maybe=[],
+        no=[],
+        my_vote=VoteValue.YES,
+    )
+
+    app.dependency_overrides[
+        get_current_user
+    ] = lambda: user
+    app.dependency_overrides[
+        get_db
+    ] = override_db
+
+    monkeypatch.setattr(
+        "app.api.groups.put_vote",
+        lambda *args, **kwargs: proposal,
+    )
+
+    response = client.put(
+        "/api/v1/groups/"
+        f"7fQ2mXk9Lp3R/proposals/"
+        f"{proposal.proposal.id}/vote/me",
+        json={"value": "yes"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["my_vote"] == "yes"
+    assert user.id.hex in (
+        response.text.replace("-", "")
+    )
+
+    app.dependency_overrides.clear()
+
+
+def test_delete_vote(monkeypatch) -> None:
+    user = make_user()
+    proposal_id = uuid4()
+
+    app.dependency_overrides[
+        get_current_user
+    ] = lambda: user
+    app.dependency_overrides[
+        get_db
+    ] = override_db
+
+    monkeypatch.setattr(
+        "app.api.groups.delete_vote",
+        lambda *args, **kwargs: None,
+    )
+
+    response = client.delete(
+        "/api/v1/groups/"
+        f"7fQ2mXk9Lp3R/proposals/"
+        f"{proposal_id}/vote/me"
+    )
+
+    assert response.status_code == 204
+
+    app.dependency_overrides.clear()

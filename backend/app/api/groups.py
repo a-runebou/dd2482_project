@@ -29,10 +29,14 @@ from app.api.schemas import (
     SlotAggregate,
     SuggestionPageResponse,
     SuggestionResponse,
+    VoteInput,
 )
 from app.config import get_settings
 from app.domain.slots import SlotValidationError
 from app.infra.db import get_db
+from app.infra.models.scheduling import (
+    VoteValue,
+)
 from app.infra.models.user import User
 from app.services.availability import (
     get_availability_matrix,
@@ -61,8 +65,14 @@ from app.services.memberships import (
     remove_member,
 )
 from app.services.proposals import (
+    GroupConfirmed as ProposalGroupConfirmed,
+)
+from app.services.proposals import (
     ProposalLimitReached,
+    ProposalNotFound,
     ProposalView,
+    delete_vote,
+    put_vote,
 )
 from app.services.suggestions import (
     get_suggestions,
@@ -655,4 +665,81 @@ def proposal_response(
             else None
         ),
         created_at=proposal.created_at,
+    )
+
+
+
+@router.put(
+    "/{slug}/proposals/{proposal_id}/vote/me",
+    response_model=ProposalResponse,
+)
+def put_my_vote(
+    slug: str,
+    proposal_id: UUID,
+    body: VoteInput,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ProposalResponse:
+    try:
+        proposal = put_vote(
+            db,
+            slug=slug,
+            user_id=user.id,
+            proposal_id=proposal_id,
+            value=VoteValue(body.value),
+        )
+    except (
+        GroupNotFound,
+        ProposalNotFound,
+    ) as exc:
+        raise ProblemException(
+            status_code=404,
+            code="not_found",
+            title="Not found",
+        ) from exc
+    except ProposalGroupConfirmed as exc:
+        raise ProblemException(
+            status_code=409,
+            code="group_confirmed",
+            title="Group confirmed",
+        ) from exc
+
+    return proposal_response(proposal)
+
+
+@router.delete(
+    "/{slug}/proposals/{proposal_id}/vote/me",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_my_vote(
+    slug: str,
+    proposal_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    try:
+        delete_vote(
+            db,
+            slug=slug,
+            user_id=user.id,
+            proposal_id=proposal_id,
+        )
+    except (
+        GroupNotFound,
+        ProposalNotFound,
+    ) as exc:
+        raise ProblemException(
+            status_code=404,
+            code="not_found",
+            title="Not found",
+        ) from exc
+    except ProposalGroupConfirmed as exc:
+        raise ProblemException(
+            status_code=409,
+            code="group_confirmed",
+            title="Group confirmed",
+        ) from exc
+
+    return Response(
+        status_code=status.HTTP_204_NO_CONTENT
     )

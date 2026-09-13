@@ -262,3 +262,7 @@ class ProposalResponse(BaseModel):
 class ProposalPageResponse(BaseModel):
     data: list[ProposalResponse]
     next_cursor: str | None = None
+
+
+class VoteInput(BaseModel):
+    value: Literal["yes", "maybe", "no"]

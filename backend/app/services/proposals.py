@@ -12,6 +12,7 @@ from app.domain.slots import (
     generate_slots,
 )
 from app.infra.models.group import (
+    Group,
     GroupState,
     MembershipRole,
 )
@@ -89,7 +90,7 @@ def _proposal_view(
 
 def _validate_proposal_window(
     *,
-    group,
+    group: Group,
     start_at: datetime,
     end_at: datetime,
 ) -> None:
@@ -337,3 +338,93 @@ def get_proposal(
         ),
         group_view,
     )
+
+
+def put_vote(
+    db: Session,
+    *,
+    slug: str,
+    user_id: UUID,
+    proposal_id: UUID,
+    value: VoteValue,
+) -> ProposalView:
+    proposal_view, group_view = get_proposal(
+        db,
+        slug=slug,
+        user_id=user_id,
+        proposal_id=proposal_id,
+    )
+
+    if (
+        group_view.group.state
+        == GroupState.CONFIRMED
+    ):
+        raise GroupConfirmed
+
+    vote = db.scalar(
+        select(Vote).where(
+            Vote.proposal_id == proposal_id,
+            Vote.user_id == user_id,
+        )
+    )
+
+    if vote is None:
+        vote = Vote(
+            proposal_id=proposal_id,
+            user_id=user_id,
+            value=value,
+        )
+        db.add(vote)
+    else:
+        vote.value = value
+
+    group_view.group.version += 1
+    group_view.group.updated_at = (
+        datetime.now(UTC)
+    )
+
+    db.commit()
+
+    return _proposal_view(
+        db,
+        proposal=proposal_view.proposal,
+        user_id=user_id,
+    )
+
+
+def delete_vote(
+    db: Session,
+    *,
+    slug: str,
+    user_id: UUID,
+    proposal_id: UUID,
+) -> None:
+    _, group_view = get_proposal(
+        db,
+        slug=slug,
+        user_id=user_id,
+        proposal_id=proposal_id,
+    )
+
+    if (
+        group_view.group.state
+        == GroupState.CONFIRMED
+    ):
+        raise GroupConfirmed
+
+    vote = db.scalar(
+        select(Vote).where(
+            Vote.proposal_id == proposal_id,
+            Vote.user_id == user_id,
+        )
+    )
+
+    if vote is not None:
+        db.delete(vote)
+
+        group_view.group.version += 1
+        group_view.group.updated_at = (
+            datetime.now(UTC)
+        )
+
+        db.commit()
