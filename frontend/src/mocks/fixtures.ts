@@ -329,3 +329,138 @@ export const notOwnerProblem: components["schemas"]["Problem"] = {
   detail: "Owner only.",
   code: "not_owner",
 };
+
+// --- Availability -----------------------------------------------------------------------
+
+type ParticipantAvailability = components["schemas"]["ParticipantAvailability"];
+type BusyBlock = components["schemas"]["BusyBlock"];
+
+/**
+ * A group whose range spans 24 to 26 October 2026, so the daylight-saving change on the 25th is
+ * exercised by every test that touches it. The daily window is 01:00 to 04:00 local, which
+ * brackets the moment Europe/Stockholm rewinds 03:00 to 02:00: the 24th and the 26th have six
+ * slots each and the 25th has eight, and the local labels 02:00 and 02:30 appear twice on it.
+ */
+export const dstGroupFixture: Group = {
+  slug: "6mN4sGh7Rt2Y",
+  name: "Clocks-change workshop",
+  description: "Deliberately straddles the 25 October 2026 transition.",
+  owner_id: "b6e1d1d0-1f0a-4a3b-8c2e-aaaaaaaaaaaa",
+  timezone: "Europe/Stockholm",
+  date_start: "2026-10-24",
+  date_end: "2026-10-26",
+  window_start_minute: 60,
+  window_end_minute: 240,
+  slot_minutes: 30,
+  state: "open",
+  member_count: 4,
+  my_role: "member",
+  version: 5,
+  created_at: "2026-09-01T08:00:00Z",
+  updated_at: "2026-09-06T08:00:00Z",
+};
+
+/** The same group, confirmed, so the read-only branch has something to render. */
+export const dstConfirmedGroupFixture: Group = {
+  ...dstGroupFixture,
+  slug: "8pQ1tHj5Wz3B",
+  name: "Clocks-change retrospective",
+  state: "confirmed",
+  version: 9,
+};
+
+/**
+ * The other members' responses, as indices into the generated slot vector. Index 6 is 01:00 on
+ * the 25th, so 8 and 9 are the first pass through 02:00 and 02:30, the hour that repeats.
+ *
+ * Every combination the contract allows is present: two members who responded and marked slots,
+ * one who responded and marked nothing, and one who has never responded at all. The last is what
+ * proves the heatmap denominator counts responders rather than members.
+ */
+export const dstParticipantsFixture: ParticipantAvailability[] = [
+  {
+    user_id: dstGroupFixture.owner_id,
+    display_name: "Grace Hopper",
+    responded: true,
+    available: [6, 7],
+    preferred: [8, 9],
+  },
+  {
+    user_id: "b6e1d1d0-1f0a-4a3b-8c2e-bbbbbbbbbbbb",
+    display_name: "Alan Turing",
+    responded: true,
+    available: [7, 8],
+    preferred: [],
+  },
+  {
+    user_id: "b6e1d1d0-1f0a-4a3b-8c2e-cccccccccccc",
+    display_name: "Edsger Dijkstra",
+    responded: false,
+    available: [],
+    preferred: [],
+  },
+];
+
+/** One imported busy block, covering 02:00 to 02:30 CEST on the 25th: slot index 8. */
+export const dstBusyFixture: BusyBlock[] = [
+  {
+    start_at: "2026-10-25T00:00:00Z",
+    end_at: "2026-10-25T00:30:00Z",
+    source_id: "b6e1d1d0-1f0a-4a3b-8c2e-dddddddddddd",
+  },
+];
+
+export const dstMembersPageFixture: components["schemas"]["MemberPage"] = {
+  data: [
+    {
+      user_id: dstGroupFixture.owner_id,
+      display_name: "Grace Hopper",
+      role: "owner",
+      responded: true,
+      joined_at: "2026-09-01T08:00:00Z",
+    },
+    {
+      user_id: dstParticipantsFixture[1]!.user_id,
+      display_name: "Alan Turing",
+      role: "member",
+      responded: true,
+      joined_at: "2026-09-01T09:00:00Z",
+    },
+    {
+      user_id: dstParticipantsFixture[2]!.user_id,
+      display_name: "Edsger Dijkstra",
+      role: "member",
+      responded: false,
+      joined_at: "2026-09-01T10:00:00Z",
+    },
+    {
+      user_id: userFixture.id,
+      display_name: userFixture.display_name,
+      role: "member",
+      responded: false,
+      joined_at: "2026-09-01T11:00:00Z",
+    },
+  ],
+  next_cursor: null,
+};
+
+groupsBySlugFixture[dstGroupFixture.slug] = dstGroupFixture;
+groupsBySlugFixture[dstConfirmedGroupFixture.slug] = dstConfirmedGroupFixture;
+membersBySlugFixture[dstGroupFixture.slug] = dstMembersPageFixture;
+membersBySlugFixture[dstConfirmedGroupFixture.slug] = dstMembersPageFixture;
+
+export const slotNotInWindowProblem: components["schemas"]["Problem"] = {
+  type: "about:blank",
+  title: "Unprocessable Entity",
+  status: 422,
+  detail: "A slot lies outside the group's window.",
+  code: "slot_not_in_window",
+};
+
+export const dbCircuitOpenProblem: components["schemas"]["Problem"] = {
+  type: "about:blank",
+  title: "Service Unavailable",
+  status: 503,
+  detail: "The database circuit breaker is open.",
+  code: "db_circuit_open",
+};

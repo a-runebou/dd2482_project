@@ -9,17 +9,24 @@ import { createQueryClient } from "../api/queryClient";
 import { server } from "../mocks/server";
 import { mockUrl } from "../mocks/urls";
 import {
+  dstGroupFixture,
   groupsPage1Fixture,
   ownerGroupFixture,
   userFixture,
 } from "../mocks/fixtures";
-import { setMockRefreshCookie } from "../mocks/handlers";
+import {
+  resetMockAvailability,
+  resetMockGroups,
+  setMockRefreshCookie,
+} from "../mocks/handlers";
 import { clearSession } from "../api/session";
 
 // The boot gate probes POST /auth/refresh once per QueryClient, and the mock refresh cookie is
 // present by default, so a test that wants a signed-out home page has to say so.
 beforeEach(() => {
   setMockRefreshCookie(true);
+  resetMockGroups();
+  resetMockAvailability();
 });
 
 afterEach(() => {
@@ -184,6 +191,29 @@ describe("routing", () => {
       await screen.findByRole("heading", { name: ownerGroupFixture.name }),
     ).toBeInTheDocument();
     expect(await screen.findByText("Grace Hopper")).toBeInTheDocument();
+  });
+
+  it("renders the availability grid at /groups/:slug/availability after boot", async () => {
+    renderApp(appRoutes, [`/groups/${dstGroupFixture.slug}/availability`]);
+
+    expect(
+      await screen.findByRole("heading", { name: "Availability" }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("grid", { name: /availability grid/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("navigates from a group's detail page to its availability grid", async () => {
+    renderApp(appRoutes, [`/groups/${dstGroupFixture.slug}`]);
+
+    fireEvent.click(
+      await screen.findByRole("link", { name: /open the availability grid/i }),
+    );
+
+    expect(
+      await screen.findByRole("grid", { name: /availability grid/i }),
+    ).toBeInTheDocument();
   });
 
   it("navigates from the groups list to a group's detail page", async () => {

@@ -127,6 +127,13 @@ export function GroupDetail({ slug }: { slug: string }) {
             <p className="mt-2 text-neutral-600">{group.description}</p>
           )}
           <Summary group={group} />
+          {/* Every member answers the grid, so this is not gated on the owner role. */}
+          <Link
+            to={`/groups/${slug}/availability`}
+            className={`mt-4 inline-block ${LINK}`}
+          >
+            Open the availability grid
+          </Link>
         </>
       )}
 

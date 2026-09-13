@@ -1,10 +1,14 @@
 import { http, HttpResponse } from "msw";
 import type { components } from "../api/generated/schema";
+import { generateSlots, normalizeInstant } from "../lib/slots";
 
 type Group = components["schemas"]["Group"];
 type MemberPage = components["schemas"]["MemberPage"];
+type AvailabilitySelection = components["schemas"]["AvailabilitySelection"];
 import {
   configFixture,
+  dstBusyFixture,
+  dstParticipantsFixture,
   createdGroupFixture,
   exchangedSessionFixture,
   groupConfirmedProblem,
@@ -18,7 +22,9 @@ import {
   notOwnerProblem,
   refreshedSessionFixture,
   rotatedInviteUrl,
+  slotNotInWindowProblem,
   unauthenticatedProblem,
+  userFixture,
   validationFailedProblem,
   versionConflictProblem,
 } from "./fixtures";
@@ -65,6 +71,90 @@ let members: Record<string, MemberPage> = structuredClone(membersBySlugFixture);
 export function resetMockGroups(): void {
   groups = { ...groupsBySlugFixture };
   members = structuredClone(membersBySlugFixture);
+}
+
+/**
+ * The caller's own availability, per slug, so that a save followed by a refetch shows what was
+ * saved rather than the fixture. Reset it in a beforeEach alongside resetMockGroups; MSW's
+ * resetHandlers does not touch module state.
+ */
+let mySelections: Record<string, AvailabilitySelection> = {};
+
+export function resetMockAvailability(): void {
+  mySelections = {};
+}
+
+function storedSelection(slug: string): AvailabilitySelection {
+  return mySelections[slug] ?? { available: [], preferred: [] };
+}
+
+/**
+ * The slot vector for a group, generated the way the backend generates it: per local day in the
+ * group's timezone, so a mock of the 25 October 2026 group really does return the extra slots.
+ */
+function slotVector(group: Group): string[] {
+  return generateSlots(
+    group.date_start,
+    group.date_end,
+    group.window_start_minute,
+    group.window_end_minute,
+    group.slot_minutes,
+    group.timezone,
+  );
+}
+
+/**
+ * The matrix, with the signed-in user folded in as a participant whose marks come from whatever
+ * was last stored. That is what makes "save, reload, see it again" true in the development mock.
+ */
+function availabilityMatrix(
+  group: Group,
+): components["schemas"]["AvailabilityMatrix"] {
+  const slots = slotVector(group);
+  const indexOf = new Map(slots.map((slot, index) => [slot, index]));
+  const stored = storedSelection(group.slug);
+  const toIndices = (instants: string[]): number[] =>
+    instants
+      .map((instant) => indexOf.get(normalizeInstant(instant)))
+      .filter((index): index is number => index !== undefined);
+  const preferred = toIndices(stored.preferred);
+  const preferredSet = new Set(preferred);
+  const responded = stored.available.length + stored.preferred.length > 0;
+
+  const participants = [
+    ...dstParticipantsFixture,
+    {
+      user_id: userFixture.id,
+      display_name: userFixture.display_name,
+      responded,
+      available: toIndices(stored.available).filter(
+        (index) => !preferredSet.has(index),
+      ),
+      preferred,
+    },
+  ];
+
+  const aggregate = slots.map((_, slotIndex) => ({
+    slot_index: slotIndex,
+    available_count: participants.filter(
+      (participant) =>
+        participant.responded && participant.available.includes(slotIndex),
+    ).length,
+    preferred_count: participants.filter(
+      (participant) =>
+        participant.responded && participant.preferred.includes(slotIndex),
+    ).length,
+  }));
+
+  return {
+    version: group.version,
+    slots,
+    participants,
+    aggregate,
+    responded_count: participants.filter((participant) => participant.responded)
+      .length,
+    member_count: participants.length,
+  };
 }
 
 /** One path parameter, which MSW types as string | readonly string[]. */
@@ -196,5 +286,80 @@ export const handlers = [
     members[slug] = { ...roster, data: remaining };
     groups[slug] = { ...group, member_count: remaining.length };
     return new HttpResponse(null, { status: 204 });
+  }),
+  // --- Availability ---------------------------------------------------------------------
+  http.get(mockUrl("/groups/:slug/availability"), ({ params }) => {
+    const group = groups[pathParam(params.slug)];
+    if (group === undefined) {
+      return problemResponse(groupNotFoundProblem);
+    }
+    const matrix = availabilityMatrix(group);
+    return HttpResponse.json(matrix, {
+      headers: { ETag: groupEtag(group) },
+    });
+  }),
+  http.get(mockUrl("/groups/:slug/availability/me"), ({ params }) => {
+    const slug = pathParam(params.slug);
+    if (groups[slug] === undefined) {
+      return problemResponse(groupNotFoundProblem);
+    }
+    return HttpResponse.json(storedSelection(slug));
+  }),
+  // The order mirrors the backend: existence, then the group's state, then the slots
+  // themselves. A full replacement, so whatever arrives is the whole stored selection.
+  http.put(
+    mockUrl("/groups/:slug/availability/me"),
+    async ({ params, request }) => {
+      const slug = pathParam(params.slug);
+      const group = groups[slug];
+      if (group === undefined) {
+        return problemResponse(groupNotFoundProblem);
+      }
+      if (group.state === "confirmed") {
+        return problemResponse(groupConfirmedProblem);
+      }
+      const body = (await request.json()) as AvailabilitySelection;
+      const allowed = new Set(slotVector(group));
+      const submitted = [...body.available, ...body.preferred];
+      if (
+        submitted.some((instant) => !allowed.has(normalizeInstant(instant)))
+      ) {
+        return problemResponse(slotNotInWindowProblem);
+      }
+      // A slot in both arrays counts as preferred, so the echo never repeats it.
+      const preferred = [...new Set(body.preferred.map(normalizeInstant))];
+      const preferredSet = new Set(preferred);
+      const stored: AvailabilitySelection = {
+        available: [...new Set(body.available.map(normalizeInstant))].filter(
+          (instant) => !preferredSet.has(instant),
+        ),
+        preferred,
+      };
+      mySelections[slug] = stored;
+      groups[slug] = { ...group, version: group.version + 1 };
+      return HttpResponse.json(stored, {
+        headers: { ETag: groupEtag(groups[slug]) },
+      });
+    },
+  ),
+  // from and to are required by the contract; a request missing either is a 400, as it would be
+  // from the backend's own query validation.
+  http.get(mockUrl("/me/busy"), ({ request }) => {
+    const url = new URL(request.url);
+    const from = url.searchParams.get("from");
+    const to = url.searchParams.get("to");
+    if (from === null || to === null) {
+      return problemResponse(validationFailedProblem);
+    }
+    const fromMillis = Date.parse(from);
+    const toMillis = Date.parse(to);
+    return HttpResponse.json({
+      data: dstBusyFixture.filter(
+        (block) =>
+          Date.parse(block.start_at) < toMillis &&
+          Date.parse(block.end_at) > fromMillis,
+      ),
+      next_cursor: null,
+    });
   }),
 ];
