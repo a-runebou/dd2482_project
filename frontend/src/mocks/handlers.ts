@@ -1,14 +1,26 @@
 import { http, HttpResponse } from "msw";
 import type { components } from "../api/generated/schema";
+
+type Group = components["schemas"]["Group"];
+type MemberPage = components["schemas"]["MemberPage"];
 import {
   configFixture,
   createdGroupFixture,
   exchangedSessionFixture,
+  groupConfirmedProblem,
+  groupEtag,
+  groupNotFoundProblem,
+  groupsBySlugFixture,
   groupsPage1Fixture,
   groupsPage2Fixture,
+  membersBySlugFixture,
+  notFoundProblem,
+  notOwnerProblem,
   refreshedSessionFixture,
+  rotatedInviteUrl,
   unauthenticatedProblem,
   validationFailedProblem,
+  versionConflictProblem,
 } from "./fixtures";
 import { mockUrl } from "./urls";
 
@@ -31,6 +43,33 @@ function unauthenticatedResponse() {
     status: 401,
     headers: { "Content-Type": "application/problem+json" },
   });
+}
+
+function problemResponse(problem: components["schemas"]["Problem"]) {
+  return HttpResponse.json(problem, {
+    status: problem.status,
+    headers: { "Content-Type": "application/problem+json" },
+  });
+}
+
+/**
+ * A mutable copy of the group fixtures, so that the development mock behaves like a server:
+ * a rename shows the new name after the refetch, a rotation bumps the version, and a delete
+ * makes the slug 404. Tests that need to count requests install their own handlers; a test
+ * that relies on these must call resetMockGroups() in a beforeEach, because
+ * server.resetHandlers() does not touch module state.
+ */
+let groups: Record<string, Group> = { ...groupsBySlugFixture };
+let members: Record<string, MemberPage> = structuredClone(membersBySlugFixture);
+
+export function resetMockGroups(): void {
+  groups = { ...groupsBySlugFixture };
+  members = structuredClone(membersBySlugFixture);
+}
+
+/** One path parameter, which MSW types as string | readonly string[]. */
+function pathParam(value: string | readonly string[] | undefined): string {
+  return typeof value === "string" ? value : (value?.[0] ?? "");
 }
 
 // Handlers match the absolute base URL the runtime client uses, so a request to a different
@@ -78,6 +117,84 @@ export const handlers = [
   ),
   http.delete(mockUrl("/auth/session"), () => {
     refreshCookiePresent = false;
+    return new HttpResponse(null, { status: 204 });
+  }),
+  // --- Group detail ---------------------------------------------------------------------
+  // A read always carries the ETag, because every mutation below insists on a matching
+  // If-Match when the client sends one. Unknown slugs are 404 group_not_found, which is also
+  // what a non-member receives: the handler cannot tell the two apart, and neither can the UI.
+  http.get(mockUrl("/groups/:slug"), ({ params }) => {
+    const group = groups[pathParam(params.slug)];
+    if (group === undefined) {
+      return problemResponse(groupNotFoundProblem);
+    }
+    return HttpResponse.json(group, { headers: { ETag: groupEtag(group) } });
+  }),
+  http.get(mockUrl("/groups/:slug/members"), ({ params }) => {
+    const roster = members[pathParam(params.slug)];
+    if (roster === undefined) {
+      return problemResponse(groupNotFoundProblem);
+    }
+    return HttpResponse.json(roster);
+  }),
+  // The ordering of the checks matters and mirrors the backend: existence, then the
+  // precondition, then the state, then the role.
+  http.patch(mockUrl("/groups/:slug"), async ({ params, request }) => {
+    const slug = pathParam(params.slug);
+    const group = groups[slug];
+    if (group === undefined) {
+      return problemResponse(groupNotFoundProblem);
+    }
+    const ifMatch = request.headers.get("If-Match");
+    if (ifMatch !== null && ifMatch !== groupEtag(group)) {
+      return problemResponse(versionConflictProblem);
+    }
+    if (group.state === "confirmed") {
+      return problemResponse(groupConfirmedProblem);
+    }
+    if (group.my_role !== "owner") {
+      return problemResponse(notOwnerProblem);
+    }
+    const body = (await request.json()) as components["schemas"]["GroupPatch"];
+    const rotate = body.rotate_invite_token === true;
+    // The rotate flags are instructions, not properties of the group, so they are never merged.
+    const { rotate_invite_token, rotate_feed_token, ...rest } = body;
+    void rotate_invite_token;
+    void rotate_feed_token;
+    const updated = { ...group, ...rest, version: group.version + 1 };
+    groups[slug] = updated;
+    return HttpResponse.json(
+      rotate ? { ...updated, invite_url: rotatedInviteUrl(slug) } : updated,
+      { headers: { ETag: groupEtag(updated) } },
+    );
+  }),
+  http.delete(mockUrl("/groups/:slug"), ({ params }) => {
+    const slug = pathParam(params.slug);
+    if (groups[slug] === undefined) {
+      return problemResponse(groupNotFoundProblem);
+    }
+    delete groups[slug];
+    delete members[slug];
+    return new HttpResponse(null, { status: 204 });
+  }),
+  http.delete(mockUrl("/groups/:slug/members/:userId"), ({ params }) => {
+    const slug = pathParam(params.slug);
+    const group = groups[slug];
+    const roster = members[slug];
+    if (group === undefined || roster === undefined) {
+      return problemResponse(groupNotFoundProblem);
+    }
+    const userId = pathParam(params.userId);
+    // The owner can neither be removed nor leave (ARCHITECTURE section 5).
+    if (roster.data.some((m) => m.user_id === userId && m.role === "owner")) {
+      return problemResponse(notOwnerProblem);
+    }
+    const remaining = roster.data.filter((m) => m.user_id !== userId);
+    if (remaining.length === roster.data.length) {
+      return problemResponse(notFoundProblem);
+    }
+    members[slug] = { ...roster, data: remaining };
+    groups[slug] = { ...group, member_count: remaining.length };
     return new HttpResponse(null, { status: 204 });
   }),
 ];

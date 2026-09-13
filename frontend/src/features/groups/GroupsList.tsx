@@ -112,7 +112,11 @@ export function GroupsList() {
         {groups.map((group) => (
           <li key={group.slug}>
             <Card>
-              <p className="font-semibold">{group.name}</p>
+              <p className="font-semibold">
+                <Link to={`/groups/${group.slug}`} className={LINK}>
+                  {group.name}
+                </Link>
+              </p>
               <p className="mt-1 text-sm text-neutral-600">
                 {formatDateRange(group.date_start, group.date_end)}
               </p>

@@ -8,7 +8,11 @@ import { appRoutes } from "./routes";
 import { createQueryClient } from "../api/queryClient";
 import { server } from "../mocks/server";
 import { mockUrl } from "../mocks/urls";
-import { groupsPage1Fixture, userFixture } from "../mocks/fixtures";
+import {
+  groupsPage1Fixture,
+  ownerGroupFixture,
+  userFixture,
+} from "../mocks/fixtures";
 import { setMockRefreshCookie } from "../mocks/handlers";
 import { clearSession } from "../api/session";
 
@@ -172,5 +176,34 @@ describe("routing", () => {
     expect(
       await screen.findByText(userFixture.display_name),
     ).toBeInTheDocument();
+  });
+  it("renders the group's name at /groups/:slug after boot", async () => {
+    renderApp(appRoutes, [`/groups/${ownerGroupFixture.slug}`]);
+
+    expect(
+      await screen.findByRole("heading", { name: ownerGroupFixture.name }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Grace Hopper")).toBeInTheDocument();
+  });
+
+  it("navigates from the groups list to a group's detail page", async () => {
+    let requestCount = 0;
+    server.use(
+      http.get(mockUrl("/groups"), () => {
+        requestCount += 1;
+        return HttpResponse.json(groupsPage1Fixture);
+      }),
+    );
+
+    renderApp(appRoutes, ["/groups"]);
+
+    fireEvent.click(
+      await screen.findByRole("link", { name: ownerGroupFixture.name }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: ownerGroupFixture.name }),
+    ).toBeInTheDocument();
+    expect(requestCount).toBe(1);
   });
 });

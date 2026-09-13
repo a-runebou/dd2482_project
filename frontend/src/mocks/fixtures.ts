@@ -196,3 +196,136 @@ export const tokenExpiredProblem: components["schemas"]["Problem"] = {
   detail: "The access token has expired.",
   code: "token_expired",
 };
+
+// --- Group detail -----------------------------------------------------------------------
+
+type Member = components["schemas"]["Member"];
+type Group = components["schemas"]["Group"];
+
+/**
+ * The mock ETag. The contract calls it "derived from the group version" and says nothing more,
+ * so the shape here is deliberately opaque and not reconstructible from the body: a test that
+ * asserts If-Match is proving the client echoed the header it was given rather than rebuilding
+ * a string from `version`.
+ */
+export function groupEtag(group: Group): string {
+  return `W/"${group.slug}-v${group.version}"`;
+}
+
+export const ownerMemberFixture: Member = {
+  user_id: ownerGroupFixture.owner_id,
+  display_name: "Grace Hopper",
+  role: "owner",
+  responded: true,
+  joined_at: "2026-09-01T10:00:00Z",
+};
+
+export const respondedMemberFixture: Member = {
+  user_id: "b6e1d1d0-1f0a-4a3b-8c2e-888888888888",
+  display_name: "Alan Turing",
+  role: "member",
+  responded: true,
+  joined_at: "2026-09-02T10:00:00Z",
+};
+
+export const pendingMemberFixture: Member = {
+  user_id: "b6e1d1d0-1f0a-4a3b-8c2e-999999999999",
+  display_name: "Edsger Dijkstra",
+  role: "member",
+  responded: false,
+  joined_at: "2026-09-03T10:00:00Z",
+};
+
+export const ownerMembersPageFixture: components["schemas"]["MemberPage"] = {
+  data: [ownerMemberFixture, respondedMemberFixture, pendingMemberFixture],
+  next_cursor: null,
+};
+
+// The member group's roster contains the signed-in user as an ordinary member, so a test can
+// exercise leaving: the user id comes from the session store, not from the roster.
+export const memberGroupOwnerFixture: Member = {
+  user_id: memberGroupFixture.owner_id,
+  display_name: "Barbara Liskov",
+  role: "owner",
+  responded: true,
+  joined_at: "2026-09-02T09:00:00Z",
+};
+
+export const selfMemberFixture: Member = {
+  user_id: userFixture.id,
+  display_name: userFixture.display_name,
+  role: "member",
+  responded: false,
+  joined_at: "2026-09-04T09:00:00Z",
+};
+
+export const memberGroupMembersPageFixture: components["schemas"]["MemberPage"] =
+  {
+    data: [memberGroupOwnerFixture, selfMemberFixture],
+    next_cursor: null,
+  };
+
+/** Every group a detail handler can serve, by slug. */
+export const groupsBySlugFixture: Record<string, Group> = {
+  [ownerGroupFixture.slug]: ownerGroupFixture,
+  [memberGroupFixture.slug]: memberGroupFixture,
+  [confirmedGroupFixture.slug]: confirmedGroupFixture,
+  [roleUnknownGroupFixture.slug]: roleUnknownGroupFixture,
+};
+
+export const membersBySlugFixture: Record<
+  string,
+  components["schemas"]["MemberPage"]
+> = {
+  [ownerGroupFixture.slug]: ownerMembersPageFixture,
+  [memberGroupFixture.slug]: memberGroupMembersPageFixture,
+  [confirmedGroupFixture.slug]: memberGroupMembersPageFixture,
+  [roleUnknownGroupFixture.slug]: ownerMembersPageFixture,
+};
+
+/** The invite URL a rotation answers with. Distinct from the creation one, so a test can tell. */
+export const rotatedInviteToken = "q2Zx7wB5nT8mV1cJ4hK6rD9sG3fP0aLe";
+
+export function rotatedInviteUrl(slug: string): string {
+  return `${globalThis.location.origin}/join/${slug}?invite=${rotatedInviteToken}`;
+}
+
+export const groupNotFoundProblem: components["schemas"]["Problem"] = {
+  type: "about:blank",
+  title: "Not Found",
+  status: 404,
+  detail: "No such group.",
+  code: "group_not_found",
+};
+
+export const notFoundProblem: components["schemas"]["Problem"] = {
+  type: "about:blank",
+  title: "Not Found",
+  status: 404,
+  detail: "No such member.",
+  code: "not_found",
+};
+
+export const versionConflictProblem: components["schemas"]["Problem"] = {
+  type: "about:blank",
+  title: "Precondition Failed",
+  status: 412,
+  detail: "The group has changed.",
+  code: "version_conflict",
+};
+
+export const groupConfirmedProblem: components["schemas"]["Problem"] = {
+  type: "about:blank",
+  title: "Conflict",
+  status: 409,
+  detail: "The group is confirmed.",
+  code: "group_confirmed",
+};
+
+export const notOwnerProblem: components["schemas"]["Problem"] = {
+  type: "about:blank",
+  title: "Forbidden",
+  status: 403,
+  detail: "Owner only.",
+  code: "not_owner",
+};

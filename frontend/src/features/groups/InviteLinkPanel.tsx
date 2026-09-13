@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
@@ -9,6 +9,10 @@ import { LINK } from "../../components/cx";
 interface InviteLinkPanelProps {
   groupName: string;
   inviteUrl: string;
+  /** Defaults to the wording for a freshly created group. */
+  heading?: string;
+  /** The sentence under the field; a rotation warns about the previous link instead. */
+  note?: ReactNode;
 }
 
 type CopyState = "idle" | "copied" | "manual";
@@ -27,6 +31,8 @@ const MANUAL_COPY_MESSAGE = "Press Ctrl+C or Cmd+C to copy the link.";
 export function InviteLinkPanel({
   groupName,
   inviteUrl,
+  heading = "Group created",
+  note = "This link is shown only now. Copy it before you leave this page. As the owner you can generate a new one later, which invalidates this one.",
 }: InviteLinkPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [copyState, setCopyState] = useState<CopyState>("idle");
@@ -49,7 +55,7 @@ export function InviteLinkPanel({
   return (
     <div className="mt-6">
       <Card>
-        <h2 className="text-lg font-semibold">Group created</h2>
+        <h2 className="text-lg font-semibold">{heading}</h2>
         <p className="mt-2 font-semibold">{groupName}</p>
 
         <div className="mt-5">
@@ -67,11 +73,7 @@ export function InviteLinkPanel({
           </Field>
         </div>
 
-        <p className="mt-2 text-sm text-neutral-600">
-          This link is shown only now. Copy it before you leave this page. As
-          the owner you can generate a new one later, which invalidates this
-          one.
-        </p>
+        <p className="mt-2 text-sm text-neutral-600">{note}</p>
 
         <div className="mt-5 flex flex-wrap items-center gap-4">
           <Button

@@ -23,8 +23,11 @@ export interface WindowOptions {
  * from local midnight in the group's timezone, so a label is a rendering of that number and
  * never a wall-clock instant (CLAUDE.md rule 3). The final end option, 1440, reads "24:00"
  * because "00:00" would suggest the previous midnight.
+ *
+ * Exported because the group detail renders the stored window with it: the same number has to
+ * read the same way whether it is being chosen or displayed.
  */
-function label(minute: number): string {
+export function clockLabel(minute: number): string {
   const hours = Math.floor(minute / 60);
   const minutes = minute % 60;
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
@@ -33,7 +36,7 @@ function label(minute: number): string {
 function range(from: number, to: number, step: number): WindowOption[] {
   const options: WindowOption[] = [];
   for (let minute = from; minute <= to; minute += step) {
-    options.push({ minute, label: label(minute) });
+    options.push({ minute, label: clockLabel(minute) });
   }
   return options;
 }

@@ -269,4 +269,16 @@ describe("GroupsList", () => {
     expect(screen.getByText("Algorithms study group")).toBeInTheDocument();
     expect(requestCount).toBe(2);
   });
+  it("links each item's name to its detail route", async () => {
+    renderGroupsList();
+
+    const link = await screen.findByRole("link", {
+      name: "Algorithms study group",
+    });
+    expect(link).toHaveAttribute("href", "/groups/7fQ2mXk9Lp3R");
+    expect(
+      screen.getByRole("link", { name: "Thesis planning" }),
+    ).toHaveAttribute("href", "/groups/9gR3nYq8Mh4S");
+    expect(requestCount).toBe(1);
+  });
 });
