@@ -126,9 +126,7 @@ async def post_calendar_upload(
 ) -> CalendarSourceResponse:
     settings = get_settings()
 
-    content = await file.read(
-        settings.max_ics_bytes + 1
-    )
+    content = await file.read(settings.max_ics_bytes + 1)
 
     if len(content) > settings.max_ics_bytes:
         raise ProblemException(
@@ -175,10 +173,7 @@ def get_calendar_sources(
     )
 
     return CalendarSourcePageResponse(
-        data=[
-            calendar_source_response(source)
-            for source in sources
-        ],
+        data=[calendar_source_response(source) for source in sources],
         next_cursor=None,
     )
 
@@ -239,9 +234,7 @@ def remove_calendar_source(
             title="Calendar source not found",
         ) from exc
 
-    return Response(
-        status_code=status.HTTP_204_NO_CONTENT
-    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(

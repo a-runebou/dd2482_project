@@ -56,11 +56,7 @@ def _proposal_view(
     proposal: Proposal,
     user_id: UUID,
 ) -> ProposalView:
-    votes = db.scalars(
-        select(Vote).where(
-            Vote.proposal_id == proposal.id
-        )
-    ).all()
+    votes = db.scalars(select(Vote).where(Vote.proposal_id == proposal.id)).all()
 
     yes: list[UUID] = []
     maybe: list[UUID] = []
@@ -113,9 +109,7 @@ def _validate_proposal_window(
 
     duration = end_at - start_at
 
-    slot_delta = timedelta(
-        minutes=group.slot_minutes
-    )
+    slot_delta = timedelta(minutes=group.slot_minutes)
 
     if duration % slot_delta != timedelta(0):
         raise SlotValidationError(
@@ -128,16 +122,10 @@ def _validate_proposal_window(
             timezone_name=group.timezone,
             date_start=group.date_start,
             date_end=group.date_end,
-            window_start_minute=(
-                group.window_start_minute
-            ),
-            window_end_minute=(
-                group.window_end_minute
-            ),
+            window_start_minute=(group.window_start_minute),
+            window_end_minute=(group.window_end_minute),
             slot_minutes=group.slot_minutes,
-            max_range_days=(
-                settings.max_range_days
-            ),
+            max_range_days=(settings.max_range_days),
         )
     )
 
@@ -167,9 +155,7 @@ def list_proposals(
 
     proposals = db.scalars(
         select(Proposal)
-        .where(
-            Proposal.group_id == view.group.id
-        )
+        .where(Proposal.group_id == view.group.id)
         .order_by(
             Proposal.created_at,
             Proposal.id,
@@ -215,17 +201,10 @@ def create_proposal(
         raise GroupConfirmed
 
     proposal_count = db.scalar(
-        select(func.count())
-        .select_from(Proposal)
-        .where(
-            Proposal.group_id == group.id
-        )
+        select(func.count()).select_from(Proposal).where(Proposal.group_id == group.id)
     )
 
-    if (
-        int(proposal_count or 0)
-        >= settings.max_proposals_per_group
-    ):
+    if int(proposal_count or 0) >= settings.max_proposals_per_group:
         raise ProposalLimitReached
 
     _validate_proposal_window(
@@ -237,25 +216,17 @@ def create_proposal(
     proposal = Proposal(
         id=new_uuid(),
         group_id=group.id,
-        start_at=start_at.astimezone(
-            UTC
-        ),
-        end_at=end_at.astimezone(
-            UTC
-        ),
+        start_at=start_at.astimezone(UTC),
+        end_at=end_at.astimezone(UTC),
         origin=origin,
         created_by=user_id,
-        created_at=datetime.now(
-            UTC
-        ),
+        created_at=datetime.now(UTC),
     )
 
     db.add(proposal)
 
     group.version += 1
-    group.updated_at = datetime.now(
-        UTC
-    )
+    group.updated_at = datetime.now(UTC)
 
     db.commit()
     db.refresh(proposal)
@@ -299,9 +270,7 @@ def delete_proposal(
     db.delete(proposal)
 
     view.group.version += 1
-    view.group.updated_at = datetime.now(
-        UTC
-    )
+    view.group.updated_at = datetime.now(UTC)
 
     db.commit()
 
@@ -322,8 +291,7 @@ def get_proposal(
     proposal = db.scalar(
         select(Proposal).where(
             Proposal.id == proposal_id,
-            Proposal.group_id
-            == group_view.group.id,
+            Proposal.group_id == group_view.group.id,
         )
     )
 
@@ -355,10 +323,7 @@ def put_vote(
         proposal_id=proposal_id,
     )
 
-    if (
-        group_view.group.state
-        == GroupState.CONFIRMED
-    ):
+    if group_view.group.state == GroupState.CONFIRMED:
         raise GroupConfirmed
 
     vote = db.scalar(
@@ -379,9 +344,7 @@ def put_vote(
         vote.value = value
 
     group_view.group.version += 1
-    group_view.group.updated_at = (
-        datetime.now(UTC)
-    )
+    group_view.group.updated_at = datetime.now(UTC)
 
     db.commit()
 
@@ -406,10 +369,7 @@ def delete_vote(
         proposal_id=proposal_id,
     )
 
-    if (
-        group_view.group.state
-        == GroupState.CONFIRMED
-    ):
+    if group_view.group.state == GroupState.CONFIRMED:
         raise GroupConfirmed
 
     vote = db.scalar(
@@ -423,8 +383,6 @@ def delete_vote(
         db.delete(vote)
 
         group_view.group.version += 1
-        group_view.group.updated_at = (
-            datetime.now(UTC)
-        )
+        group_view.group.updated_at = datetime.now(UTC)
 
         db.commit()

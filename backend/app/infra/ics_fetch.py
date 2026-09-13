@@ -11,7 +11,7 @@ class IcsFetchError(RuntimeError):
 
 def _normalise_url(url: str) -> str:
     if url.startswith("webcal://"):
-        return "https://" + url[len("webcal://"):]
+        return "https://" + url[len("webcal://") :]
 
     return url
 
@@ -23,34 +23,21 @@ def _validate_host(url: str) -> None:
         "http",
         "https",
     }:
-        raise IcsFetchError(
-            "Unsupported calendar URL scheme"
-        )
+        raise IcsFetchError("Unsupported calendar URL scheme")
 
     if parsed.hostname is None:
-        raise IcsFetchError(
-            "Calendar URL has no hostname"
-        )
+        raise IcsFetchError("Calendar URL has no hostname")
 
     try:
         addresses = socket.getaddrinfo(
             parsed.hostname,
-            parsed.port
-            or (
-                443
-                if parsed.scheme == "https"
-                else 80
-            ),
+            parsed.port or (443 if parsed.scheme == "https" else 80),
         )
     except OSError as exc:
-        raise IcsFetchError(
-            "Calendar host could not be resolved"
-        ) from exc
+        raise IcsFetchError("Calendar host could not be resolved") from exc
 
     for address in addresses:
-        ip = ipaddress.ip_address(
-            address[4][0]
-        )
+        ip = ipaddress.ip_address(address[4][0])
 
         if (
             ip.is_private
@@ -60,9 +47,7 @@ def _validate_host(url: str) -> None:
             or ip.is_reserved
             or ip.is_unspecified
         ):
-            raise IcsFetchError(
-                "Calendar URL resolves to a forbidden address"
-            )
+            raise IcsFetchError("Calendar URL resolves to a forbidden address")
 
 
 def fetch_ics(
@@ -90,25 +75,18 @@ def fetch_ics(
                 headers=headers,
             )
     except httpx.HTTPError as exc:
-        raise IcsFetchError(
-            "Calendar could not be fetched"
-        ) from exc
+        raise IcsFetchError("Calendar could not be fetched") from exc
 
     if response.status_code == 304:
         return None, etag
 
     if response.status_code != 200:
-        raise IcsFetchError(
-            f"Calendar returned HTTP "
-            f"{response.status_code}"
-        )
+        raise IcsFetchError(f"Calendar returned HTTP {response.status_code}")
 
     content = response.content
 
     if len(content) > max_bytes:
-        raise IcsFetchError(
-            "Calendar exceeds maximum size"
-        )
+        raise IcsFetchError("Calendar exceeds maximum size")
 
     return (
         content,

@@ -8,6 +8,4 @@ from app.infra.ics_fetch import (
 
 def test_reject_localhost_calendar_url() -> None:
     with pytest.raises(IcsFetchError):
-        _validate_host(
-            "http://127.0.0.1/calendar.ics"
-        )
+        _validate_host("http://127.0.0.1/calendar.ics")

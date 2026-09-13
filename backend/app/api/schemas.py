@@ -227,7 +227,6 @@ class SuggestionPageResponse(BaseModel):
     next_cursor: str | None = None
 
 
-
 class ProposalCreate(BaseModel):
     start_at: datetime
     end_at: datetime
@@ -253,11 +252,14 @@ class ProposalResponse(BaseModel):
     ]
     created_by: UUID
     votes: ProposalVotes
-    my_vote: Literal[
-        "yes",
-        "maybe",
-        "no",
-    ] | None = None
+    my_vote: (
+        Literal[
+            "yes",
+            "maybe",
+            "no",
+        ]
+        | None
+    ) = None
     created_at: datetime
 
 
@@ -273,7 +275,6 @@ class VoteInput(BaseModel):
 class ConfirmationRequest(BaseModel):
     proposal_id: UUID
     send_reminders: bool = True
-
 
 
 class CalendarSourceResponse(BaseModel):
@@ -302,6 +303,7 @@ class BusyBlockResponse(BaseModel):
 class BusyBlockPageResponse(BaseModel):
     data: list[BusyBlockResponse]
     next_cursor: str | None = None
+
 
 class CalendarSourceCreate(BaseModel):
     url: str = Field(

@@ -51,9 +51,7 @@ def join_group(
     user: User,
     invite_token: str,
 ) -> GroupView:
-    group = db.scalar(
-        select(Group).where(Group.slug == slug)
-    )
+    group = db.scalar(select(Group).where(Group.slug == slug))
 
     if group is None:
         raise GroupNotFound
@@ -127,9 +125,7 @@ def list_members(
             User,
             User.id == Membership.user_id,
         )
-        .where(
-            Membership.group_id == view.group.id
-        )
+        .where(Membership.group_id == view.group.id)
         .order_by(Membership.joined_at)
     ).all()
 
@@ -140,10 +136,8 @@ def list_members(
             select(func.count())
             .select_from(Availability)
             .where(
-                Availability.group_id
-                == membership.group_id,
-                Availability.user_id
-                == membership.user_id,
+                Availability.group_id == membership.group_id,
+                Availability.user_id == membership.user_id,
             )
         )
 
@@ -151,10 +145,7 @@ def list_members(
             MemberView(
                 membership=membership,
                 user=user,
-                responded=bool(
-                    membership.availability_submitted_at
-                    is not None
-                ),
+                responded=bool(membership.availability_submitted_at is not None),
             )
         )
 
@@ -187,9 +178,7 @@ def remove_member(
     if target.role == MembershipRole.OWNER:
         raise ForbiddenMemberAction
 
-    caller_is_owner = (
-        view.my_role == MembershipRole.OWNER
-    )
+    caller_is_owner = view.my_role == MembershipRole.OWNER
     removing_self = caller_id == target_user_id
 
     if not caller_is_owner and not removing_self:
@@ -211,8 +200,6 @@ def remove_member(
     db.delete(target)
 
     view.group.version += 1
-    view.group.updated_at = datetime.now(
-        UTC
-    )
+    view.group.updated_at = datetime.now(UTC)
 
     db.commit()

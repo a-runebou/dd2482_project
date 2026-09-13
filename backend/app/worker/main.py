@@ -22,7 +22,7 @@ def run_worker() -> None:
 
             try:
                 handle_job(db, job)
-            except Exception as exc: # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
                 retry_job(
                     db,
                     job,

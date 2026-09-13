@@ -46,8 +46,7 @@ def request_magic_link(
         id=new_uuid(),
         user_id=user.id,
         token_hash=hash_token(token),
-        expires_at=now
-        + timedelta(seconds=settings.magic_link_ttl_seconds),
+        expires_at=now + timedelta(seconds=settings.magic_link_ttl_seconds),
         consumed_at=None,
     )
 
@@ -124,8 +123,7 @@ def create_session(
         user_id=user.id,
         token_hash=hash_token(raw_refresh_token),
         family_id=family_id,
-        expires_at=now
-        + timedelta(days=settings.refresh_token_ttl_days),
+        expires_at=now + timedelta(days=settings.refresh_token_ttl_days),
         revoked_at=None,
     )
 
@@ -193,8 +191,7 @@ def refresh_session(
         user_id=user.id,
         token_hash=hash_token(new_raw_token),
         family_id=stored_token.family_id,
-        expires_at=now
-        + timedelta(days=settings.refresh_token_ttl_days),
+        expires_at=now + timedelta(days=settings.refresh_token_ttl_days),
         revoked_at=None,
     )
 

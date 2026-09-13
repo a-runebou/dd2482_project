@@ -31,35 +31,25 @@ def generate_suggestions(
     slot_minutes: int = 30,
 ) -> list[SuggestionResult]:
     if duration_minutes <= 0:
-        raise ValueError(
-            "duration_minutes must be positive"
-        )
+        raise ValueError("duration_minutes must be positive")
 
     if duration_minutes % slot_minutes != 0:
-        raise ValueError(
-            "duration_minutes must align to slot_minutes"
-        )
+        raise ValueError("duration_minutes must align to slot_minutes")
 
     if limit <= 0:
         raise ValueError("limit must be positive")
 
-    slots_per_window = (
-        duration_minutes // slot_minutes
-    )
+    slots_per_window = duration_minutes // slot_minutes
 
     if slots_per_window > len(slots):
         return []
 
     results: list[SuggestionResult] = []
 
-    for start_index in range(
-        len(slots) - slots_per_window + 1
-    ):
+    for start_index in range(len(slots) - slots_per_window + 1):
         end_index = start_index + slots_per_window
 
-        window_slots = slots[
-            start_index:end_index
-        ]
+        window_slots = slots[start_index:end_index]
 
         if not _is_contiguous_window(
             window_slots,
@@ -67,9 +57,7 @@ def generate_suggestions(
         ):
             continue
 
-        window_indices = set(
-            range(start_index, end_index)
-        )
+        window_indices = set(range(start_index, end_index))
 
         fully_available: list[UUID] = []
         fully_preferred: list[UUID] = []
@@ -90,68 +78,41 @@ def generate_suggestions(
 
             for participant in participants:
                 if slot_index in participant.preferred:
-                    available_at_slot.add(
-                        participant.user_id
-                    )
+                    available_at_slot.add(participant.user_id)
                     preferred_count += 1
 
                 elif slot_index in participant.available:
-                    available_at_slot.add(
-                        participant.user_id
-                    )
+                    available_at_slot.add(participant.user_id)
                     available_count += 1
 
-            availability_sets.append(
-                available_at_slot
-            )
+            availability_sets.append(available_at_slot)
 
-            score_sum += (
-                2 * preferred_count
-                + available_count
-            )
+            score_sum += 2 * preferred_count + available_count
 
         if availability_sets:
             first_set = availability_sets[0]
 
-            if any(
-                current_set != first_set
-                for current_set
-                in availability_sets[1:]
-            ):
+            if any(current_set != first_set for current_set in availability_sets[1:]):
                 continue
 
         for participant in participants:
             available_for_all = all(
-                (
-                    index
-                    in participant.available
-                )
-                or (
-                    index
-                    in participant.preferred
-                )
+                (index in participant.available) or (index in participant.preferred)
                 for index in window_indices
             )
 
             preferred_for_all = all(
-                index in participant.preferred
-                for index in window_indices
+                index in participant.preferred for index in window_indices
             )
 
             if preferred_for_all:
-                fully_preferred.append(
-                    participant.user_id
-                )
+                fully_preferred.append(participant.user_id)
 
             elif available_for_all:
-                fully_available.append(
-                    participant.user_id
-                )
+                fully_available.append(participant.user_id)
 
             else:
-                missing.append(
-                    participant.user_id
-                )
+                missing.append(participant.user_id)
 
         score = score_sum / slots_per_window
 
@@ -160,8 +121,7 @@ def generate_suggestions(
                 start_at=window_slots[0],
                 end_at=slots[end_index - 1]
                 + (
-                    slots[end_index - 1]
-                    - slots[end_index - 2]
+                    slots[end_index - 1] - slots[end_index - 2]
                     if slots_per_window > 1
                     else _slot_delta(slot_minutes)
                 ),
@@ -202,6 +162,5 @@ def _is_contiguous_window(
     expected_delta = _slot_delta(slot_minutes)
 
     return all(
-        current - previous == expected_delta
-        for previous, current in pairwise(slots)
+        current - previous == expected_delta for previous, current in pairwise(slots)
     )

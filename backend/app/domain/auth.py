@@ -38,8 +38,7 @@ def create_access_token(user_id: UUID) -> str:
     payload = {
         "sub": str(user_id),
         "iat": now,
-        "exp": now
-        + timedelta(seconds=settings.access_token_ttl_seconds),
+        "exp": now + timedelta(seconds=settings.access_token_ttl_seconds),
     }
 
     return jwt.encode(

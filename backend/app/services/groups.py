@@ -53,9 +53,7 @@ def etag_for(version: int) -> str:
 
 
 def encode_cursor(group_id: UUID) -> str:
-    encoded = base64.urlsafe_b64encode(
-        group_id.bytes
-    ).decode("ascii")
+    encoded = base64.urlsafe_b64encode(group_id.bytes).decode("ascii")
 
     return encoded.rstrip("=")
 
@@ -67,9 +65,7 @@ def decode_cursor(cursor: str) -> UUID:
         raw = base64.urlsafe_b64decode(cursor + padding)
         return UUID(bytes=raw)
     except (ValueError, TypeError) as exc:
-        raise SlotValidationError(
-            "invalid cursor"
-        ) from exc
+        raise SlotValidationError("invalid cursor") from exc
 
 
 def _member_count(
@@ -91,9 +87,7 @@ def get_group_view(
     slug: str,
     user_id: UUID,
 ) -> GroupView:
-    group = db.scalar(
-        select(Group).where(Group.slug == slug)
-    )
+    group = db.scalar(select(Group).where(Group.slug == slug))
 
     if group is None:
         raise GroupNotFound
@@ -150,9 +144,7 @@ def create_group(
 
     slug = generate_group_slug()
 
-    while db.scalar(
-        select(Group.id).where(Group.slug == slug)
-    ) is not None:
+    while db.scalar(select(Group.id).where(Group.slug == slug)) is not None:
         slug = generate_group_slug()
 
     invite_token = generate_token()
@@ -222,13 +214,9 @@ def list_group_views(
     )
 
     if cursor is not None:
-        query = query.where(
-            Group.id > decode_cursor(cursor)
-        )
+        query = query.where(Group.id > decode_cursor(cursor))
 
-    rows = db.execute(
-        query.limit(limit + 1)
-    ).all()
+    rows = db.execute(query.limit(limit + 1)).all()
 
     has_more = len(rows) > limit
     selected_rows = rows[:limit]
@@ -245,9 +233,7 @@ def list_group_views(
     next_cursor = None
 
     if has_more and result:
-        next_cursor = encode_cursor(
-            result[-1].group.id
-        )
+        next_cursor = encode_cursor(result[-1].group.id)
 
     return result, next_cursor
 
@@ -273,10 +259,7 @@ def update_group(
 
     group = view.group
 
-    if (
-        if_match is not None
-        and if_match != etag_for(group.version)
-    ):
+    if if_match is not None and if_match != etag_for(group.version):
         raise VersionConflict
 
     timezone_name = cast(
@@ -343,14 +326,10 @@ def update_group(
     group.window_end_minute = window_end_minute
 
     if changes.get("rotate_invite_token") is True:
-        group.invite_token_hash = hash_token(
-            generate_token()
-        )
+        group.invite_token_hash = hash_token(generate_token())
 
     if changes.get("rotate_feed_token") is True:
-        group.feed_token_hash = hash_token(
-            generate_token()
-        )
+        group.feed_token_hash = hash_token(generate_token())
 
     if bounds_changed:
         valid_slots = set(
@@ -358,21 +337,15 @@ def update_group(
                 timezone_name=group.timezone,
                 date_start=group.date_start,
                 date_end=group.date_end,
-                window_start_minute=(
-                    group.window_start_minute
-                ),
-                window_end_minute=(
-                    group.window_end_minute
-                ),
+                window_start_minute=(group.window_start_minute),
+                window_end_minute=(group.window_end_minute),
                 slot_minutes=group.slot_minutes,
                 max_range_days=settings.max_range_days,
             )
         )
 
         availability_rows = db.scalars(
-            select(Availability).where(
-                Availability.group_id == group.id
-            )
+            select(Availability).where(Availability.group_id == group.id)
         ).all()
 
         for availability in availability_rows:

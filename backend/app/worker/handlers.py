@@ -15,14 +15,10 @@ def handle_job(
     job: Job,
 ) -> None:
     if job.kind == "ics_poll":
-        source_id = job.payload.get(
-            "source_id"
-        )
+        source_id = job.payload.get("source_id")
 
         if not isinstance(source_id, str):
-            raise ValueError(
-                "ics_poll job missing source_id"
-            )
+            raise ValueError("ics_poll job missing source_id")
 
         handle_ics_poll(
             db,
@@ -31,9 +27,7 @@ def handle_job(
         return
 
     if job.kind == "email_send":
-        handle_email_send(
-            payload=job.payload
-        )
+        handle_email_send(payload=job.payload)
         return
 
     if job.kind == "reminder_send":
@@ -43,6 +37,4 @@ def handle_job(
         )
         return
 
-    raise ValueError(
-        f"Unknown job kind: {job.kind}"
-    )
+    raise ValueError(f"Unknown job kind: {job.kind}")

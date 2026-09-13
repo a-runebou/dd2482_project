@@ -51,15 +51,9 @@ def calendar_horizon(
     if not groups:
         return now, now + timedelta(days=90)
 
-    start_date = min(
-        group.date_start
-        for group in groups
-    )
+    start_date = min(group.date_start for group in groups)
 
-    end_date = max(
-        group.date_end
-        for group in groups
-    )
+    end_date = max(group.date_end for group in groups)
 
     start = datetime.combine(
         start_date,
@@ -127,11 +121,7 @@ def upload_calendar(
         user_id=user.id,
         kind=CalendarSourceKind.UPLOAD,
         url=None,
-        label=(
-            filename[:64]
-            if filename
-            else None
-        ),
+        label=(filename[:64] if filename else None),
         status=CalendarSourceStatus.OK,
         last_polled_at=now,
         last_error_code=None,
@@ -169,14 +159,10 @@ def _validate_calendar_url(url: str) -> str:
         "https",
         "webcal",
     }:
-        raise ValueError(
-            "Calendar URL must use http, https or webcal"
-        )
+        raise ValueError("Calendar URL must use http, https or webcal")
 
     if not parsed.hostname:
-        raise ValueError(
-            "Calendar URL must contain a hostname"
-        )
+        raise ValueError("Calendar URL must contain a hostname")
 
     return url
 
@@ -189,9 +175,7 @@ def list_calendar_sources(
     return list(
         db.scalars(
             select(CalendarSource)
-            .where(
-                CalendarSource.user_id == user_id
-            )
+            .where(CalendarSource.user_id == user_id)
             .order_by(CalendarSource.created_at)
         ).all()
     )
@@ -234,9 +218,7 @@ def create_calendar_source(
         Job(
             id=new_uuid(),
             kind="ics_poll",
-            payload={
-                "source_id": str(source.id)
-            },
+            payload={"source_id": str(source.id)},
             run_after=now,
             attempts=0,
             dedupe_key=f"ics_poll:{source.id}",
@@ -308,17 +290,14 @@ def refresh_calendar_source(
 
     if (
         source.last_polled_at is not None
-        and (
-            now - source.last_polled_at
-        ).total_seconds()
+        and (now - source.last_polled_at).total_seconds()
         < settings.manual_refresh_cooldown_seconds
     ):
         raise RuntimeError("rate_limited")
 
     existing = db.scalar(
         select(Job).where(
-            Job.dedupe_key
-            == f"ics_poll:{source.id}",
+            Job.dedupe_key == f"ics_poll:{source.id}",
             Job.completed_at.is_(None),
         )
     )
@@ -328,14 +307,10 @@ def refresh_calendar_source(
             Job(
                 id=new_uuid(),
                 kind="ics_poll",
-                payload={
-                    "source_id": str(source.id)
-                },
+                payload={"source_id": str(source.id)},
                 run_after=now,
                 attempts=0,
-                dedupe_key=(
-                    f"ics_poll:{source.id}"
-                ),
+                dedupe_key=(f"ics_poll:{source.id}"),
                 locked_at=None,
                 completed_at=None,
                 last_error=None,
@@ -358,9 +333,7 @@ def get_busy_blocks(
     end_at: datetime,
 ) -> list[BusyBlock]:
     if end_at <= start_at:
-        raise ValueError(
-            "to must be after from"
-        )
+        raise ValueError("to must be after from")
 
     return list(
         db.scalars(

@@ -19,9 +19,7 @@ class ParsedBusyBlock:
 def _as_datetime(value: object) -> datetime:
     if isinstance(value, datetime):
         if value.tzinfo is None:
-            return value.replace(
-                tzinfo=UTC
-            )
+            return value.replace(tzinfo=UTC)
 
         return value.astimezone(UTC)
 
@@ -32,9 +30,7 @@ def _as_datetime(value: object) -> datetime:
             tzinfo=UTC,
         )
 
-    raise IcsParseError(
-        "Unsupported calendar date value"
-    )
+    raise IcsParseError("Unsupported calendar date value")
 
 
 def parse_ics(
@@ -46,16 +42,12 @@ def parse_ics(
     horizon_end: datetime,
 ) -> list[ParsedBusyBlock]:
     if len(content) > max_bytes:
-        raise IcsParseError(
-            "Calendar exceeds maximum size"
-        )
+        raise IcsParseError("Calendar exceeds maximum size")
 
     try:
         calendar = Calendar.from_ical(content.decode("utf-8"))
     except Exception as exc:
-        raise IcsParseError(
-            "Calendar could not be parsed"
-        ) from exc
+        raise IcsParseError("Calendar could not be parsed") from exc
 
     result: list[ParsedBusyBlock] = []
 
@@ -68,25 +60,17 @@ def parse_ics(
         event_count += 1
 
         if event_count > max_events:
-            raise IcsParseError(
-                "Calendar contains too many events"
-            )
+            raise IcsParseError("Calendar contains too many events")
 
         if "DTSTART" not in component:
             continue
 
-        start = _as_datetime(
-            component.decoded("DTSTART")
-        )
+        start = _as_datetime(component.decoded("DTSTART"))
 
         if "DTEND" in component:
-            end = _as_datetime(
-                component.decoded("DTEND")
-            )
+            end = _as_datetime(component.decoded("DTEND"))
         elif "DURATION" in component:
-            end = start + component.decoded(
-                "DURATION"
-            )
+            end = start + component.decoded("DURATION")
         else:
             end = start + timedelta(minutes=30)
 
@@ -94,17 +78,10 @@ def parse_ics(
             continue
 
         uid_value = component.get("UID")
-        uid = (
-            str(uid_value)
-            if uid_value is not None
-            else f"event-{event_count}"
-        )
+        uid = str(uid_value) if uid_value is not None else f"event-{event_count}"
 
         if "RRULE" not in component:
-            if (
-                end > horizon_start
-                and start < horizon_end
-            ):
+            if end > horizon_start and start < horizon_end:
                 result.append(
                     ParsedBusyBlock(
                         start_at=start,
@@ -117,9 +94,7 @@ def parse_ics(
 
         duration = end - start
 
-        rrule_value = component["RRULE"].to_ical().decode(
-            "utf-8"
-        )
+        rrule_value = component["RRULE"].to_ical().decode("utf-8")
 
         try:
             recurrence = rrulestr(
@@ -127,9 +102,7 @@ def parse_ics(
                 dtstart=start,
             )
         except (TypeError, ValueError) as exc:
-            raise IcsParseError(
-                "Calendar contains an invalid recurrence rule"
-            ) from exc
+            raise IcsParseError("Calendar contains an invalid recurrence rule") from exc
 
         occurrences = recurrence.between(
             horizon_start - duration,
@@ -138,17 +111,10 @@ def parse_ics(
         )
 
         for occurrence in occurrences:
-            occurrence_start = _as_datetime(
-                occurrence
-            )
-            occurrence_end = (
-                occurrence_start + duration
-            )
+            occurrence_start = _as_datetime(occurrence)
+            occurrence_end = occurrence_start + duration
 
-            if (
-                occurrence_end > horizon_start
-                and occurrence_start < horizon_end
-            ):
+            if occurrence_end > horizon_start and occurrence_start < horizon_end:
                 result.append(
                     ParsedBusyBlock(
                         start_at=occurrence_start,
@@ -158,9 +124,7 @@ def parse_ics(
                 )
 
             if len(result) > max_events:
-                raise IcsParseError(
-                    "Expanded calendar contains too many events"
-                )
+                raise IcsParseError("Expanded calendar contains too many events")
 
     result.sort(
         key=lambda block: (

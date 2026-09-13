@@ -88,7 +88,6 @@ def post_session(
     )
 
 
-
 @router.post(
     "/refresh",
     response_model=SessionResponse,

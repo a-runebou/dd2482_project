@@ -45,20 +45,16 @@ def handle_ics_poll(
         )
 
         if content is None:
-            source.status = (
-                CalendarSourceStatus.OK
-            )
+            source.status = CalendarSourceStatus.OK
             source.last_polled_at = now
             source.last_error_code = None
 
             db.commit()
             return
 
-        horizon_start, horizon_end = (
-            calendar_horizon(
-                db,
-                user_id=source.user_id,
-            )
+        horizon_start, horizon_end = calendar_horizon(
+            db,
+            user_id=source.user_id,
         )
 
         blocks = parse_ics(
@@ -70,34 +66,22 @@ def handle_ics_poll(
         )
 
     except IcsFetchError:
-        source.status = (
-            CalendarSourceStatus.ERROR
-        )
+        source.status = CalendarSourceStatus.ERROR
         source.last_polled_at = now
-        source.last_error_code = (
-            "ics_fetch_failed"
-        )
+        source.last_error_code = "ics_fetch_failed"
 
         db.commit()
         raise
 
     except IcsParseError:
-        source.status = (
-            CalendarSourceStatus.ERROR
-        )
+        source.status = CalendarSourceStatus.ERROR
         source.last_polled_at = now
-        source.last_error_code = (
-            "ics_parse_failed"
-        )
+        source.last_error_code = "ics_parse_failed"
 
         db.commit()
         raise
 
-    db.execute(
-        delete(BusyBlock).where(
-            BusyBlock.source_id == source.id
-        )
-    )
+    db.execute(delete(BusyBlock).where(BusyBlock.source_id == source.id))
 
     for block in blocks:
         db.add(
@@ -120,15 +104,8 @@ def handle_ics_poll(
     next_poll = Job(
         id=new_uuid(),
         kind="ics_poll",
-        payload={
-            "source_id": str(source.id)
-        },
-        run_after=(
-            now
-            + timedelta(
-                hours=settings.ics_poll_interval_hours
-            )
-        ),
+        payload={"source_id": str(source.id)},
+        run_after=(now + timedelta(hours=settings.ics_poll_interval_hours)),
         attempts=0,
         dedupe_key=None,
         locked_at=None,

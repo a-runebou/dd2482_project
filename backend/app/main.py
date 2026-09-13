@@ -1,18 +1,26 @@
 from typing import cast
 
 from fastapi import FastAPI, Response, status
+from fastapi.exceptions import RequestValidationError
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ExceptionHandler
 
-from app.api.errors import ProblemException, problem_exception_handler
+from app.api.errors import (
+    ProblemException,
+    http_exception_handler,
+    problem_exception_handler,
+    validation_exception_handler,
+)
 from app.api.router import api_router
 from app.infra.db import engine
 
 app = FastAPI(title="Schedular API")
+
 app.include_router(
     api_router,
-    prefix="/api/v1"
+    prefix="/api/v1",
 )
 
 app.add_exception_handler(
@@ -20,9 +28,21 @@ app.add_exception_handler(
     cast(ExceptionHandler, problem_exception_handler),
 )
 
+app.add_exception_handler(
+    RequestValidationError,
+    cast(ExceptionHandler, validation_exception_handler),
+)
+
+app.add_exception_handler(
+    StarletteHTTPException,
+    cast(ExceptionHandler, http_exception_handler),
+)
+
+
 @app.get("/healthz")
 def healthz() -> dict[str, str]:
-    return {"status": "ok"} 
+    return {"status": "ok"}
+
 
 @app.get("/readyz")
 def readyz(response: Response) -> dict[str, str]:
@@ -35,4 +55,3 @@ def readyz(response: Response) -> dict[str, str]:
     except SQLAlchemyError:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         return {"status": "not_ready"}
-

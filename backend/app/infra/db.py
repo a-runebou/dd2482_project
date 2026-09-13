@@ -7,8 +7,10 @@ from app.config import get_settings
 
 settings = get_settings()
 
+
 class Base(DeclarativeBase):
     pass
+
 
 engine = create_engine(
     settings.database_url,
@@ -20,6 +22,7 @@ SessionLocal = sessionmaker(
     autoflush=False,
     expire_on_commit=False,
 )
+
 
 def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()

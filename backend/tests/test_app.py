@@ -7,11 +7,13 @@ from app.main import app
 
 client = TestClient(app)
 
+
 def test_healthz() -> None:
     response = client.get("/healthz")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
 
 def test_readyz_when_database_is_available() -> None:
     mock_connection = MagicMock()
@@ -24,6 +26,7 @@ def test_readyz_when_database_is_available() -> None:
     assert response.status_code == 200
     assert response.json() == {"status": "ready"}
 
+
 def test_readyz_when_database_is_unavailable() -> None:
     with patch(
         "app.main.engine.connect",
@@ -33,6 +36,7 @@ def test_readyz_when_database_is_unavailable() -> None:
 
     assert response.status_code == 503
     assert response.json() == {"status": "not_ready"}
+
 
 def test_config() -> None:
     response = client.get("/api/v1/config")
@@ -49,4 +53,3 @@ def test_config() -> None:
     assert data["max_calendar_sources"] == 5
     assert data["min_duration_minutes"] == 30
     assert data["max_duration_minutes"] == 480
-
