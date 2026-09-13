@@ -1,4 +1,6 @@
 import type { ApiError } from "../api/errors";
+import { Button } from "./Button";
+import { Spinner } from "./Spinner";
 
 interface ApiErrorNoticeProps {
   error: ApiError;
@@ -50,17 +52,16 @@ export function ApiErrorNotice({
   const { message, showRetry } = present(error);
 
   return (
-    <div role="alert" className="mt-4">
+    <div
+      role="alert"
+      className="rounded-md border border-danger bg-white p-4 text-danger"
+    >
       <p>{message}</p>
       {showRetry && (
-        <button
-          type="button"
-          className="mt-2 rounded border px-4 py-2 disabled:opacity-50"
-          disabled={isRetrying}
-          onClick={retry}
-        >
+        <Button className="mt-3" disabled={isRetrying} onClick={retry}>
+          {isRetrying && <Spinner />}
           {isRetrying ? "Retrying…" : "Retry"}
-        </button>
+        </Button>
       )}
     </div>
   );

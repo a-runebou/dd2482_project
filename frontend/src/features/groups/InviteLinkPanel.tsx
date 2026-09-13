@@ -1,5 +1,10 @@
-import { useId, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Link } from "react-router";
+import { Button } from "../../components/Button";
+import { Card } from "../../components/Card";
+import { Field } from "../../components/Field";
+import { TextInput } from "../../components/TextInput";
+import { LINK } from "../../components/cx";
 
 interface InviteLinkPanelProps {
   groupName: string;
@@ -23,7 +28,6 @@ export function InviteLinkPanel({
   groupName,
   inviteUrl,
 }: InviteLinkPanelProps) {
-  const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [copyState, setCopyState] = useState<CopyState>("idle");
 
@@ -43,45 +47,51 @@ export function InviteLinkPanel({
   }
 
   return (
-    <div className="mt-4">
-      <h2 className="text-2xl font-bold">Group created</h2>
-      <p className="mt-2 font-semibold">{groupName}</p>
+    <div className="mt-6">
+      <Card>
+        <h2 className="text-lg font-semibold">Group created</h2>
+        <p className="mt-2 font-semibold">{groupName}</p>
 
-      <label htmlFor={inputId} className="mt-4 block font-medium">
-        Invite link
-      </label>
-      <input
-        id={inputId}
-        ref={inputRef}
-        type="text"
-        readOnly
-        value={inviteUrl}
-        className="mt-1 w-full rounded border px-3 py-2"
-      />
-      <p className="mt-2">
-        This link is shown only now. Copy it before you leave this page. As the
-        owner you can generate a new one later, which invalidates this one.
-      </p>
+        <div className="mt-5">
+          <Field label="Invite link">
+            {(control) => (
+              <TextInput
+                ref={inputRef}
+                type="text"
+                readOnly
+                value={inviteUrl}
+                className="font-mono text-sm"
+                {...control}
+              />
+            )}
+          </Field>
+        </div>
 
-      <div className="mt-4 flex items-center gap-4">
-        <button
-          type="button"
-          className="rounded border px-4 py-2"
-          onClick={() => {
-            void copy();
-          }}
-        >
-          Copy
-        </button>
-        <Link to="/groups" className="underline">
-          Your groups
-        </Link>
-      </div>
+        <p className="mt-2 text-sm text-neutral-600">
+          This link is shown only now. Copy it before you leave this page. As
+          the owner you can generate a new one later, which invalidates this
+          one.
+        </p>
 
-      <p role="status" className="mt-2">
-        {copyState === "copied" && "Copied"}
-        {copyState === "manual" && MANUAL_COPY_MESSAGE}
-      </p>
+        <div className="mt-5 flex flex-wrap items-center gap-4">
+          <Button
+            variant="primary"
+            onClick={() => {
+              void copy();
+            }}
+          >
+            Copy
+          </Button>
+          <Link to="/groups" className={LINK}>
+            Your groups
+          </Link>
+        </div>
+
+        <p role="status" className="mt-3 text-sm text-neutral-600">
+          {copyState === "copied" && "Copied"}
+          {copyState === "manual" && MANUAL_COPY_MESSAGE}
+        </p>
+      </Card>
     </div>
   );
 }

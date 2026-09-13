@@ -1,10 +1,12 @@
 import { CreateGroupForm } from "../features/groups/CreateGroupForm";
+import { PageContainer } from "../components/PageContainer";
+import { PageHeading } from "../components/PageHeading";
 
 export function CreateGroupPage() {
   return (
-    <main className="mx-auto max-w-2xl p-6">
-      <h1 className="text-3xl font-bold">Create a group</h1>
+    <PageContainer>
+      <PageHeading title="Create a group" />
       <CreateGroupForm />
-    </main>
+    </PageContainer>
   );
 }

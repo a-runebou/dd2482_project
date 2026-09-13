@@ -1,6 +1,12 @@
-import { useId, useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ApiErrorNotice } from "../../components/ApiErrorNotice";
+import { Button } from "../../components/Button";
+import { Field } from "../../components/Field";
+import { Select } from "../../components/Select";
+import { Spinner } from "../../components/Spinner";
+import { Textarea } from "../../components/Textarea";
+import { TextInput } from "../../components/TextInput";
 import { useConfig } from "../../api/config";
 import type { ApiError } from "../../api/errors";
 import type { components } from "../../api/generated/schema";
@@ -140,18 +146,13 @@ export function CreateGroupForm() {
   // second request before React has re-rendered the disabled button.
   const inFlightRef = useRef(false);
 
-  const fieldId = useId();
-  const nameId = `${fieldId}-name`;
-  const descriptionId = `${fieldId}-description`;
-  const timezoneId = `${fieldId}-timezone`;
-  const dateStartId = `${fieldId}-date-start`;
-  const dateEndId = `${fieldId}-date-end`;
-  const windowStartId = `${fieldId}-window-start`;
-  const windowEndId = `${fieldId}-window-end`;
-
   if (configQuery.data === undefined) {
     return (
-      <p role="status" className="mt-4">
+      <p
+        role="status"
+        className="mt-6 flex items-center gap-2 text-neutral-600"
+      >
+        <Spinner />
         Loading…
       </p>
     );
@@ -219,164 +220,123 @@ export function CreateGroupForm() {
     send(attempt);
   }
 
-  function fieldProps(field: GroupFormField, id: string) {
-    const message = errors[field];
-    return {
-      "aria-invalid": message === undefined ? undefined : true,
-      "aria-describedby": message === undefined ? undefined : `${id}-error`,
-    };
-  }
-
-  function fieldError(field: GroupFormField, id: string) {
-    const message = errors[field];
-    return message === undefined ? null : (
-      <p id={`${id}-error`} className="mt-1 text-sm">
-        {message}
-      </p>
-    );
-  }
-
   return (
-    <form onSubmit={onSubmit} noValidate className="mt-4">
-      <div className="mt-4">
-        <label htmlFor={nameId} className="block font-medium">
-          Group name
-        </label>
-        <input
-          id={nameId}
-          type="text"
-          value={values.name}
-          onChange={(event) => update({ name: event.target.value })}
-          className="mt-1 w-full rounded border px-3 py-2"
-          {...fieldProps("name", nameId)}
-        />
-        {fieldError("name", nameId)}
-      </div>
+    <form onSubmit={onSubmit} noValidate className="mt-6 space-y-5">
+      <Field label="Group name" error={errors.name}>
+        {(control) => (
+          <TextInput
+            type="text"
+            value={values.name}
+            onChange={(event) => update({ name: event.target.value })}
+            {...control}
+          />
+        )}
+      </Field>
 
-      <div className="mt-4">
-        <label htmlFor={descriptionId} className="block font-medium">
-          Description (optional)
-        </label>
-        <textarea
-          id={descriptionId}
-          value={values.description}
-          onChange={(event) => update({ description: event.target.value })}
-          className="mt-1 w-full rounded border px-3 py-2"
-          {...fieldProps("description", descriptionId)}
-        />
-        {fieldError("description", descriptionId)}
-      </div>
+      <Field label="Description (optional)" error={errors.description}>
+        {(control) => (
+          <Textarea
+            value={values.description}
+            onChange={(event) => update({ description: event.target.value })}
+            {...control}
+          />
+        )}
+      </Field>
 
-      <div className="mt-4">
-        <label htmlFor={timezoneId} className="block font-medium">
-          Timezone
-        </label>
-        <select
-          id={timezoneId}
-          value={values.timezone}
-          onChange={(event) => update({ timezone: event.target.value })}
-          className="mt-1 w-full rounded border px-3 py-2"
-          {...fieldProps("timezone", timezoneId)}
+      <Field label="Timezone" error={errors.timezone}>
+        {(control) => (
+          <Select
+            value={values.timezone}
+            onChange={(event) => update({ timezone: event.target.value })}
+            {...control}
+          >
+            {timezones.options.map((zone) => (
+              <option key={zone} value={zone}>
+                {zone}
+              </option>
+            ))}
+          </Select>
+        )}
+      </Field>
+
+      <div className="grid gap-5 sm:grid-cols-2">
+        <Field label="Start date" error={errors.date_start}>
+          {(control) => (
+            <TextInput
+              type="date"
+              value={values.dateStart}
+              onChange={(event) => update({ dateStart: event.target.value })}
+              {...control}
+            />
+          )}
+        </Field>
+
+        <Field
+          label="End date"
+          description="The end date is included in the range."
+          error={errors.date_end}
         >
-          {timezones.options.map((zone) => (
-            <option key={zone} value={zone}>
-              {zone}
-            </option>
-          ))}
-        </select>
-        {fieldError("timezone", timezoneId)}
+          {(control) => (
+            <TextInput
+              type="date"
+              value={values.dateEnd}
+              onChange={(event) => update({ dateEnd: event.target.value })}
+              {...control}
+            />
+          )}
+        </Field>
       </div>
 
-      <div className="mt-4">
-        <label htmlFor={dateStartId} className="block font-medium">
-          Start date
-        </label>
-        <input
-          id={dateStartId}
-          type="date"
-          value={values.dateStart}
-          onChange={(event) => update({ dateStart: event.target.value })}
-          className="mt-1 rounded border px-3 py-2"
-          {...fieldProps("date_start", dateStartId)}
-        />
-        {fieldError("date_start", dateStartId)}
-      </div>
+      <div className="grid gap-5 sm:grid-cols-2">
+        <Field label="Day starts at" error={errors.window_start_minute}>
+          {(control) => (
+            <Select
+              value={values.windowStartMinute}
+              onChange={(event) =>
+                update({ windowStartMinute: Number(event.target.value) })
+              }
+              {...control}
+            >
+              {startOptions.map((option) => (
+                <option key={option.minute} value={option.minute}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
 
-      <div className="mt-4">
-        <label htmlFor={dateEndId} className="block font-medium">
-          End date
-        </label>
-        <input
-          id={dateEndId}
-          type="date"
-          value={values.dateEnd}
-          onChange={(event) => update({ dateEnd: event.target.value })}
-          className="mt-1 rounded border px-3 py-2"
-          {...fieldProps("date_end", dateEndId)}
-        />
-        <p className="mt-1 text-sm">The end date is included in the range.</p>
-        {fieldError("date_end", dateEndId)}
-      </div>
-
-      <div className="mt-4">
-        <label htmlFor={windowStartId} className="block font-medium">
-          Day starts at
-        </label>
-        <select
-          id={windowStartId}
-          value={values.windowStartMinute}
-          onChange={(event) =>
-            update({ windowStartMinute: Number(event.target.value) })
-          }
-          className="mt-1 rounded border px-3 py-2"
-          {...fieldProps("window_start_minute", windowStartId)}
-        >
-          {startOptions.map((option) => (
-            <option key={option.minute} value={option.minute}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        {fieldError("window_start_minute", windowStartId)}
-      </div>
-
-      <div className="mt-4">
-        <label htmlFor={windowEndId} className="block font-medium">
-          Day ends at
-        </label>
-        <select
-          id={windowEndId}
-          value={values.windowEndMinute}
-          onChange={(event) =>
-            update({ windowEndMinute: Number(event.target.value) })
-          }
-          className="mt-1 rounded border px-3 py-2"
-          {...fieldProps("window_end_minute", windowEndId)}
-        >
-          {endOptions.map((option) => (
-            <option key={option.minute} value={option.minute}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        {fieldError("window_end_minute", windowEndId)}
+        <Field label="Day ends at" error={errors.window_end_minute}>
+          {(control) => (
+            <Select
+              value={values.windowEndMinute}
+              onChange={(event) =>
+                update({ windowEndMinute: Number(event.target.value) })
+              }
+              {...control}
+            >
+              {endOptions.map((option) => (
+                <option key={option.minute} value={option.minute}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
       </div>
 
       {serverErrors.formLevel.length > 0 && (
-        <ul role="alert" className="mt-4">
+        <ul role="alert" className="space-y-1 text-sm text-danger">
           {serverErrors.formLevel.map((message) => (
             <li key={message}>{message}</li>
           ))}
         </ul>
       )}
 
-      <button
-        type="submit"
-        className="mt-6 rounded border px-4 py-2 disabled:opacity-50"
-        disabled={mutation.isPending}
-      >
+      <Button type="submit" variant="primary" disabled={mutation.isPending}>
+        {mutation.isPending && <Spinner />}
         {mutation.isPending ? "Creating…" : "Create group"}
-      </button>
+      </Button>
 
       {error !== null && needsNotice(error) && (
         <ApiErrorNotice

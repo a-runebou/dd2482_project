@@ -1,5 +1,9 @@
 import { useEffect, useRef } from "react";
 import type { ApiError } from "../api/errors";
+import { Button } from "../components/Button";
+import { PageContainer } from "../components/PageContainer";
+import { PageHeading } from "../components/PageHeading";
+import { Spinner } from "../components/Spinner";
 
 interface BootFailureProps {
   error: ApiError;
@@ -76,23 +80,24 @@ export function BootFailure({
   }, [errorUpdatedAt, autoRetrySeconds]);
 
   return (
-    <main role="alert" className="mx-auto max-w-md p-6 text-center">
-      <h1 className="text-2xl font-bold">{heading}</h1>
-      <p className="mt-2">{message}</p>
+    <PageContainer role="alert" className="text-center">
+      <PageHeading title={heading} />
+      <p className="mt-4 text-neutral-600">{message}</p>
       {autoRetrySeconds !== undefined && (
-        <p className="mt-2">
+        <p className="mt-2 text-neutral-600">
           Retrying automatically in {autoRetrySeconds}{" "}
           {autoRetrySeconds === 1 ? "second" : "seconds"}…
         </p>
       )}
-      <button
-        type="button"
-        className="mt-4 rounded border px-4 py-2 disabled:opacity-50"
+      <Button
+        variant="primary"
+        className="mt-6"
         disabled={isFetching}
         onClick={() => refetch()}
       >
+        {isFetching && <Spinner />}
         {isFetching ? "Retrying…" : "Retry"}
-      </button>
-    </main>
+      </Button>
+    </PageContainer>
   );
 }

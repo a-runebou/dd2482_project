@@ -315,3 +315,27 @@ describe("boot session probe", () => {
     expect(state.count).toBe(1);
   });
 });
+
+describe("application header", () => {
+  it("renders the product name as a link to the home route", async () => {
+    renderApp(appRoutes, ["/groups"]);
+
+    const home = await screen.findByRole("link", { name: "Schedular" });
+    expect(home).toHaveAttribute("href", "/");
+  });
+
+  it("is not rendered while the application is still booting", async () => {
+    server.use(
+      http.get(mockUrl("/config"), () =>
+        problemResponse(503, "service_unavailable"),
+      ),
+    );
+
+    renderApp(appRoutes);
+
+    expect(
+      await screen.findByRole("heading", { name: "Temporarily unavailable" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Schedular" })).toBeNull();
+  });
+});

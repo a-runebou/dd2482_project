@@ -1,4 +1,7 @@
 import { Link } from "react-router";
+import { PageContainer } from "../components/PageContainer";
+import { PageHeading } from "../components/PageHeading";
+import { LINK } from "../components/cx";
 
 /**
  * The root route's errorElement. It deliberately renders a generic message and never the
@@ -7,14 +10,14 @@ import { Link } from "react-router";
  */
 export function RootErrorBoundary() {
   return (
-    <main role="alert" className="mx-auto max-w-md p-6 text-center">
-      <h1 className="text-2xl font-bold">Something went wrong</h1>
-      <p className="mt-2">
-        An unexpected error occurred. Please try returning to the home page.
-      </p>
-      <Link className="mt-4 inline-block underline" to="/">
+    <PageContainer role="alert" className="text-center">
+      <PageHeading
+        title="Something went wrong"
+        description="An unexpected error occurred. Please try returning to the home page."
+      />
+      <Link className={`mt-6 inline-block ${LINK}`} to="/">
         Return to the home page
       </Link>
-    </main>
+    </PageContainer>
   );
 }

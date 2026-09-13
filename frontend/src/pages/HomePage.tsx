@@ -1,14 +1,15 @@
 import { Link } from "react-router";
-import { SessionStatus } from "../features/auth/SessionStatus";
+import { PageContainer } from "../components/PageContainer";
+import { PageHeading } from "../components/PageHeading";
+import { LINK } from "../components/cx";
 
 export function HomePage() {
   return (
-    <>
-      <h1 className="text-3xl font-bold">Schedular</h1>
-      <Link className="mt-4 inline-block underline" to="/groups">
+    <PageContainer>
+      <PageHeading title="Schedular" />
+      <Link className={`mt-6 inline-block ${LINK}`} to="/groups">
         Your groups
       </Link>
-      <SessionStatus />
-    </>
+    </PageContainer>
   );
 }

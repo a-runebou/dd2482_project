@@ -1,6 +1,11 @@
-import { useId, useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { ApiErrorNotice } from "../../components/ApiErrorNotice";
+import { Button } from "../../components/Button";
+import { Field } from "../../components/Field";
+import { Spinner } from "../../components/Spinner";
+import { Card } from "../../components/Card";
+import { TextInput } from "../../components/TextInput";
 import type { ApiError } from "../../api/errors";
 import { requestMagicLinkMutationOptions } from "./requestMagicLink";
 import { validateEmail } from "./validateEmail";
@@ -71,21 +76,19 @@ function Confirmation({
   onUseDifferentAddress: () => void;
 }) {
   return (
-    <div role="status" className="mt-4">
-      <h2 className="text-2xl font-bold">Check your email</h2>
-      <p className="mt-2">
-        If that address has an account, a sign-in link is on its way.
-      </p>
-      <p className="mt-2">
-        The link expires in fifteen minutes and can be used once.
-      </p>
-      <button
-        type="button"
-        className="mt-4 rounded border px-4 py-2"
-        onClick={onUseDifferentAddress}
-      >
-        Use a different address
-      </button>
+    <div role="status" className="mt-6">
+      <Card>
+        <h2 className="text-lg font-semibold">Check your email</h2>
+        <p className="mt-2 text-neutral-600">
+          If that address has an account, a sign-in link is on its way.
+        </p>
+        <p className="mt-2 text-neutral-600">
+          The link expires in fifteen minutes and can be used once.
+        </p>
+        <Button className="mt-4" onClick={onUseDifferentAddress}>
+          Use a different address
+        </Button>
+      </Card>
     </div>
   );
 }
@@ -102,8 +105,6 @@ export function SignInForm() {
   // Set synchronously, unlike isPending, so a second click in the same tick cannot start a
   // second request before React has re-rendered the disabled button.
   const inFlightRef = useRef(false);
-
-  const emailId = useId();
 
   if (mutation.isSuccess) {
     return (
@@ -153,31 +154,20 @@ export function SignInForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} noValidate className="mt-4">
-      <div className="mt-4">
-        <label htmlFor={emailId} className="block font-medium">
-          Email address
-        </label>
-        <input
-          id={emailId}
-          type="email"
-          value={email}
-          onChange={(event) => update(event.target.value)}
-          className="mt-1 w-full rounded border px-3 py-2"
-          aria-invalid={fieldError === undefined ? undefined : true}
-          aria-describedby={
-            fieldError === undefined ? undefined : `${emailId}-error`
-          }
-        />
-        {fieldError !== undefined && (
-          <p id={`${emailId}-error`} className="mt-1 text-sm">
-            {fieldError}
-          </p>
+    <form onSubmit={onSubmit} noValidate className="mt-6">
+      <Field label="Email address" error={fieldError}>
+        {(control) => (
+          <TextInput
+            type="email"
+            value={email}
+            onChange={(event) => update(event.target.value)}
+            {...control}
+          />
         )}
-      </div>
+      </Field>
 
       {serverErrors.formLevel.length > 0 && (
-        <ul role="alert" className="mt-4">
+        <ul role="alert" className="mt-4 space-y-1 text-sm text-danger">
           {serverErrors.formLevel.map((message) => (
             <li key={message}>{message}</li>
           ))}
@@ -187,25 +177,29 @@ export function SignInForm() {
       {error !== null &&
         error.kind === "problem" &&
         error.code === "rate_limited" && (
-          <p role="alert" className="mt-4">
+          <p role="alert" className="mt-4 text-sm text-danger">
             {rateLimitedMessage(error.retryAfterSeconds)}
           </p>
         )}
 
-      <button
+      <Button
         type="submit"
-        className="mt-6 rounded border px-4 py-2 disabled:opacity-50"
+        variant="primary"
+        className="mt-6"
         disabled={mutation.isPending}
       >
+        {mutation.isPending && <Spinner />}
         {mutation.isPending ? "Sending…" : "Send sign-in link"}
-      </button>
+      </Button>
 
       {error !== null && needsNotice(error) && (
-        <ApiErrorNotice
-          error={error}
-          retry={() => send(lastSentRef.current)}
-          isRetrying={mutation.isPending}
-        />
+        <div className="mt-6">
+          <ApiErrorNotice
+            error={error}
+            retry={() => send(lastSentRef.current)}
+            isRetrying={mutation.isPending}
+          />
+        </div>
       )}
     </form>
   );

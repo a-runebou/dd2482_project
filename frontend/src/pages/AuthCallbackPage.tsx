@@ -3,6 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import type { ApiError } from "../api/errors";
 import { ApiErrorNotice } from "../components/ApiErrorNotice";
+import { PageContainer } from "../components/PageContainer";
+import { PageHeading } from "../components/PageHeading";
+import { Spinner } from "../components/Spinner";
+import { LINK } from "../components/cx";
 import { sessionExchangeQueryOptions } from "../features/auth/createSession";
 import { safeRedirectPath } from "../features/auth/redirectPath";
 
@@ -32,37 +36,42 @@ export function AuthCallbackPage() {
 
   if (token === null || isUnusableLink(exchange.error)) {
     return (
-      <main className="mx-auto max-w-2xl p-6">
-        <h1 className="text-3xl font-bold">Sign in</h1>
-        <p className="mt-4">
+      <PageContainer>
+        <PageHeading title="Sign in" />
+        <p className="mt-4 text-neutral-600">
           This sign-in link is invalid, has already been used, or has expired.
         </p>
-        <Link className="mt-4 inline-block underline" to="/sign-in">
+        <Link className={`mt-6 inline-block ${LINK}`} to="/sign-in">
           Request a new sign-in link
         </Link>
-      </main>
+      </PageContainer>
     );
   }
 
   if (exchange.isError) {
     return (
-      <main className="mx-auto max-w-2xl p-6">
-        <h1 className="text-3xl font-bold">Sign in</h1>
-        <ApiErrorNotice
-          error={exchange.error}
-          retry={() => {
-            void exchange.refetch();
-          }}
-          isRetrying={exchange.isFetching}
-        />
-      </main>
+      <PageContainer>
+        <PageHeading title="Sign in" />
+        <div className="mt-6">
+          <ApiErrorNotice
+            error={exchange.error}
+            retry={() => {
+              void exchange.refetch();
+            }}
+            isRetrying={exchange.isFetching}
+          />
+        </div>
+      </PageContainer>
     );
   }
 
   return (
-    <main role="status" className="mx-auto max-w-md p-6 text-center">
-      <p>Signing you in…</p>
-    </main>
+    <PageContainer role="status" className="text-center">
+      <p className="flex items-center justify-center gap-2 text-neutral-600">
+        <Spinner />
+        Signing you in…
+      </p>
+    </PageContainer>
   );
 }
 
