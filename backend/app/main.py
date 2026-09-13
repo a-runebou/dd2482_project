@@ -13,10 +13,17 @@ from app.api.errors import (
     problem_exception_handler,
     validation_exception_handler,
 )
+from app.api.idempotency import (
+    IdempotencyMiddleware,
+)
 from app.api.router import api_router
 from app.infra.db import engine
 
 app = FastAPI(title="Schedular API")
+
+app.add_middleware(
+    IdempotencyMiddleware,
+)
 
 app.include_router(
     api_router,
