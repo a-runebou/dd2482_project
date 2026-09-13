@@ -14,6 +14,11 @@ services:
       PUBLIC_APP_URL: ${PUBLIC_APP_URL}
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE}
       BUILD_SHA: ${BUILD_SHA}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USERNAME: ${SMTP_USERNAME}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM: ${SMTP_FROM}
 
     ports:
       - "8000:8000"
@@ -48,8 +53,20 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       PUBLIC_APP_URL: ${PUBLIC_APP_URL}
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USERNAME: ${SMTP_USERNAME}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM: ${SMTP_FROM}
     depends_on:
       - postgres
+      - mailpit
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "1025:1025"
+      - "8025:8025"
 
 volumes:
   postgres_data:

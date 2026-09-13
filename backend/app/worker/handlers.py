@@ -4,6 +4,10 @@ from sqlalchemy.orm import Session
 
 from app.infra.models.job import Job
 from app.worker.calendar import handle_ics_poll
+from app.worker.email import (
+    handle_email_send,
+    handle_reminder_send,
+)
 
 
 def handle_job(
@@ -24,7 +28,19 @@ def handle_job(
             db,
             source_id=UUID(source_id),
         )
+        return
 
+    if job.kind == "email_send":
+        handle_email_send(
+            payload=job.payload
+        )
+        return
+
+    if job.kind == "reminder_send":
+        handle_reminder_send(
+            db,
+            payload=job.payload,
+        )
         return
 
     raise ValueError(
