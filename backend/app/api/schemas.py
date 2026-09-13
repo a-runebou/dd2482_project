@@ -302,3 +302,13 @@ class BusyBlockResponse(BaseModel):
 class BusyBlockPageResponse(BaseModel):
     data: list[BusyBlockResponse]
     next_cursor: str | None = None
+
+class CalendarSourceCreate(BaseModel):
+    url: str = Field(
+        min_length=1,
+        max_length=2048,
+    )
+    label: str | None = Field(
+        default=None,
+        max_length=64,
+    )

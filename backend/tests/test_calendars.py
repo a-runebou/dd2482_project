@@ -105,3 +105,69 @@ def test_upload_requires_auth() -> None:
     )
 
     assert response.status_code == 401
+
+
+def test_create_calendar_subscription(
+    monkeypatch,
+) -> None:
+    user = make_user()
+    source = make_source()
+
+    source.kind = CalendarSourceKind.URL
+    source.url = "https://example.com/schedule.ics"
+    source.status = CalendarSourceStatus.PENDING
+
+    app.dependency_overrides[
+        get_current_user
+    ] = lambda: user
+    app.dependency_overrides[
+        get_db
+    ] = override_db
+
+    monkeypatch.setattr(
+        "app.api.me.create_calendar_source",
+        lambda *args, **kwargs: source,
+    )
+
+    response = client.post(
+        "/api/v1/me/calendar-sources",
+        json={
+            "url":
+                "https://example.com/schedule.ics",
+            "label": "KTH",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["kind"] == "url"
+    assert response.json()["status"] == "pending"
+
+    app.dependency_overrides.clear()
+
+
+def test_list_calendar_sources(
+    monkeypatch,
+) -> None:
+    user = make_user()
+    source = make_source()
+
+    app.dependency_overrides[
+        get_current_user
+    ] = lambda: user
+    app.dependency_overrides[
+        get_db
+    ] = override_db
+
+    monkeypatch.setattr(
+        "app.api.me.list_calendar_sources",
+        lambda *args, **kwargs: [source],
+    )
+
+    response = client.get(
+        "/api/v1/me/calendar-sources"
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()["data"]) == 1
+
+    app.dependency_overrides.clear()

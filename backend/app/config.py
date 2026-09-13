@@ -34,6 +34,9 @@ class Settings:
     reminder_lead_hours: int = 24
     poll_interval_seconds: int = 15
 
+    manual_refresh_cooldown_seconds: int = 300
+    ics_poll_interval_hours: int = 6
+
     access_token_ttl_seconds: int = 900
     refresh_token_ttl_days: int = 30
     magic_link_ttl_seconds: int = 900

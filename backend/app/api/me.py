@@ -1,9 +1,13 @@
+from datetime import datetime
+from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import (
     APIRouter,
     Depends,
     File,
+    Query,
+    Response,
     UploadFile,
     status,
 )
@@ -12,6 +16,10 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_current_user
 from app.api.errors import ProblemException
 from app.api.schemas import (
+    BusyBlockPageResponse,
+    BusyBlockResponse,
+    CalendarSourceCreate,
+    CalendarSourcePageResponse,
     CalendarSourceResponse,
     UserPatch,
     UserResponse,
@@ -23,6 +31,12 @@ from app.infra.models.calendar import CalendarSource
 from app.infra.models.user import User
 from app.services.calendars import (
     CalendarSourceLimitReached,
+    CalendarSourceNotFound,
+    create_calendar_source,
+    delete_calendar_source,
+    get_busy_blocks,
+    list_calendar_sources,
+    refresh_calendar_source,
     upload_calendar,
 )
 
@@ -145,3 +159,156 @@ async def post_calendar_upload(
         ) from exc
 
     return calendar_source_response(source)
+
+
+@router.get(
+    "/calendar-sources",
+    response_model=CalendarSourcePageResponse,
+)
+def get_calendar_sources(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> CalendarSourcePageResponse:
+    sources = list_calendar_sources(
+        db,
+        user_id=user.id,
+    )
+
+    return CalendarSourcePageResponse(
+        data=[
+            calendar_source_response(source)
+            for source in sources
+        ],
+        next_cursor=None,
+    )
+
+
+@router.post(
+    "/calendar-sources",
+    response_model=CalendarSourceResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def post_calendar_source(
+    body: CalendarSourceCreate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> CalendarSourceResponse:
+    try:
+        source = create_calendar_source(
+            db,
+            user=user,
+            url=body.url,
+            label=body.label,
+        )
+    except ValueError as exc:
+        raise ProblemException(
+            status_code=400,
+            code="validation_failed",
+            title="Invalid calendar URL",
+            detail=str(exc),
+        ) from exc
+    except CalendarSourceLimitReached as exc:
+        raise ProblemException(
+            status_code=409,
+            code="validation_failed",
+            title="Calendar source limit reached",
+        ) from exc
+
+    return calendar_source_response(source)
+
+
+@router.delete(
+    "/calendar-sources/{source_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def remove_calendar_source(
+    source_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    try:
+        delete_calendar_source(
+            db,
+            source_id=source_id,
+            user_id=user.id,
+        )
+    except CalendarSourceNotFound as exc:
+        raise ProblemException(
+            status_code=404,
+            code="not_found",
+            title="Calendar source not found",
+        ) from exc
+
+    return Response(
+        status_code=status.HTTP_204_NO_CONTENT
+    )
+
+
+@router.post(
+    "/calendar-sources/{source_id}/refresh",
+    response_model=CalendarSourceResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def post_calendar_refresh(
+    source_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> CalendarSourceResponse:
+    try:
+        source = refresh_calendar_source(
+            db,
+            source_id=source_id,
+            user_id=user.id,
+        )
+    except CalendarSourceNotFound as exc:
+        raise ProblemException(
+            status_code=404,
+            code="not_found",
+            title="Calendar source not found",
+        ) from exc
+    except RuntimeError as exc:
+        raise ProblemException(
+            status_code=429,
+            code="rate_limited",
+            title="Refresh rate limited",
+        ) from exc
+
+    return calendar_source_response(source)
+
+
+@router.get(
+    "/busy",
+    response_model=BusyBlockPageResponse,
+)
+def get_busy(
+    to: datetime,
+    from_: datetime = Query(alias="from"),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> BusyBlockPageResponse:
+    try:
+        blocks = get_busy_blocks(
+            db,
+            user_id=user.id,
+            start_at=from_,
+            end_at=to,
+        )
+    except ValueError as exc:
+        raise ProblemException(
+            status_code=400,
+            code="validation_failed",
+            title="Invalid busy window",
+            detail=str(exc),
+        ) from exc
+
+    return BusyBlockPageResponse(
+        data=[
+            BusyBlockResponse(
+                start_at=block.start_at,
+                end_at=block.end_at,
+                source_id=block.source_id,
+            )
+            for block in blocks
+        ],
+        next_cursor=None,
+    )
