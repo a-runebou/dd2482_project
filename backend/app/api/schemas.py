@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, model_validator
 
+from app.domain.calendar import CalendarSourceErrorCode
+
 
 class ConfigResponse(BaseModel):
     slot_minutes: Literal[30]
@@ -271,3 +273,42 @@ class VoteInput(BaseModel):
 class ConfirmationRequest(BaseModel):
     proposal_id: UUID
     send_reminders: bool = True
+
+
+
+class CalendarSourceResponse(BaseModel):
+    id: UUID
+    kind: Literal["upload", "url"]
+    url: str | None = None
+    label: str | None = None
+    status: Literal["pending", "ok", "error"]
+    last_polled_at: datetime | None = None
+    last_error_code: CalendarSourceErrorCode | None = None
+    event_count: int
+    created_at: datetime
+
+
+class CalendarSourcePageResponse(BaseModel):
+    data: list[CalendarSourceResponse]
+    next_cursor: str | None = None
+
+
+class BusyBlockResponse(BaseModel):
+    start_at: datetime
+    end_at: datetime
+    source_id: UUID | None = None
+
+
+class BusyBlockPageResponse(BaseModel):
+    data: list[BusyBlockResponse]
+    next_cursor: str | None = None
+
+class CalendarSourceCreate(BaseModel):
+    url: str = Field(
+        min_length=1,
+        max_length=2048,
+    )
+    label: str | None = Field(
+        default=None,
+        max_length=64,
+    )
