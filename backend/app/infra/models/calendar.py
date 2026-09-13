@@ -2,10 +2,11 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
-from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, String
+from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.domain.calendar import CalendarSourceErrorCode
 from app.infra.db import Base
 
 
@@ -64,7 +65,7 @@ class CalendarSource(Base):
         nullable=True,
     )
 
-    last_error_code: Mapped[str | None] = mapped_column(
+    last_error_code: Mapped[CalendarSourceErrorCode | None] = mapped_column(
         String(64),
         nullable=True,
     )
@@ -72,6 +73,22 @@ class CalendarSource(Base):
     etag: Mapped[str | None] = mapped_column(
         String(512),
         nullable=True,
+    )
+
+    label: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+    )
+
+    event_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
     )
 
 
