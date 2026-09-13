@@ -266,3 +266,8 @@ class ProposalPageResponse(BaseModel):
 
 class VoteInput(BaseModel):
     value: Literal["yes", "maybe", "no"]
+
+
+class ConfirmationRequest(BaseModel):
+    proposal_id: UUID
+    send_reminders: bool = True

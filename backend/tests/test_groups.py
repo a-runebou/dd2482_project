@@ -651,3 +651,75 @@ def test_delete_vote(monkeypatch) -> None:
     assert response.status_code == 204
 
     app.dependency_overrides.clear()
+
+
+def test_confirm_group(monkeypatch) -> None:
+    user = make_user()
+    view = make_view(user)
+
+    view.group.state = GroupState.CONFIRMED
+    view.group.confirmed_proposal_id = uuid4()
+    view.group.version = 2
+
+    app.dependency_overrides[
+        get_current_user
+    ] = lambda: user
+    app.dependency_overrides[
+        get_db
+    ] = override_db
+
+    monkeypatch.setattr(
+        "app.api.groups.confirm_group",
+        lambda *args, **kwargs: view,
+    )
+
+    response = client.post(
+        "/api/v1/groups/"
+        "7fQ2mXk9Lp3R/confirmation",
+        json={
+            "proposal_id": str(
+                view.group.confirmed_proposal_id
+            ),
+            "send_reminders": True,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["state"] == (
+        "confirmed"
+    )
+    assert response.json()["version"] == 2
+
+    app.dependency_overrides.clear()
+
+
+def test_unconfirm_group(monkeypatch) -> None:
+    user = make_user()
+    view = make_view(user)
+
+    view.group.state = GroupState.OPEN
+    view.group.confirmed_proposal_id = None
+    view.group.version = 3
+
+    app.dependency_overrides[
+        get_current_user
+    ] = lambda: user
+    app.dependency_overrides[
+        get_db
+    ] = override_db
+
+    monkeypatch.setattr(
+        "app.api.groups.unconfirm_group",
+        lambda *args, **kwargs: view,
+    )
+
+    response = client.delete(
+        "/api/v1/groups/"
+        "7fQ2mXk9Lp3R/confirmation"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["state"] == "open"
+    assert response.json()["version"] == 3
+
+    app.dependency_overrides.clear()
