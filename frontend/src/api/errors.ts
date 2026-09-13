@@ -127,10 +127,19 @@ export function normalizeError(response: Response, body: unknown): ApiError {
 }
 
 /**
+ * Classify something a fetch threw rather than answered. A fetch that never produced a
+ * response throws a TypeError, which is `network`; any other thrown value is `unexpected`,
+ * so a genuine network failure and a client-side error are never conflated.
+ */
+export function normalizeThrown(thrown: unknown): ApiError {
+  return thrown instanceof TypeError
+    ? { kind: "network" }
+    : { kind: "unexpected" };
+}
+
+/**
  * Return the data of an openapi-fetch result, or throw an ApiError so TanStack Query sees
- * a rejection. A fetch that never produced a response throws a TypeError, which becomes
- * `network`; any other thrown value becomes `unexpected`, so a genuine network failure and
- * a client-side error are never conflated.
+ * a rejection.
  */
 export async function unwrap<T>(
   call: Promise<{ data?: T; error?: unknown; response: Response }>,
@@ -139,11 +148,7 @@ export async function unwrap<T>(
   try {
     result = await call;
   } catch (thrown) {
-    const error: ApiError =
-      thrown instanceof TypeError
-        ? { kind: "network" }
-        : { kind: "unexpected" };
-    throw error;
+    throw normalizeThrown(thrown);
   }
   const { data, error, response } = result;
   if (response.ok) {

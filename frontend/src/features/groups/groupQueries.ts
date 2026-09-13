@@ -1,6 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
-import { normalizeError, unwrap, type ApiError } from "../../api/errors";
+import { conditionalRead } from "../../api/conditional";
+import { unwrap, type ApiError } from "../../api/errors";
 import type { components } from "../../api/generated/schema";
 
 type Group = components["schemas"]["Group"];
@@ -28,35 +29,47 @@ export const groupMembersKey = (slug: string) =>
   ["groups", "detail", slug, "members"] as const;
 
 /**
- * `unwrap` deliberately returns only the body, so the ETag would be lost. This is the same
- * contract — data or a thrown ApiError — with the response header kept.
+ * The group, read conditionally: the ETag the last 200 carried goes back as If-None-Match, and
+ * a 304 puts the identical cached read back rather than fetching a body again. That matters
+ * most after a mutation invalidates this query, which is the common case for this screen.
+ *
+ * The read keeps its own `{ group, etag }` shape rather than the API layer's `CachedRead`,
+ * because that is the shape the detail screen already reads (frontend DECISIONS F21) and the
+ * conditional read is meant to be invisible to it.
  */
-async function readGroup(slug: string): Promise<GroupRead> {
-  let result;
-  try {
-    result = await apiClient.GET("/groups/{slug}", {
+async function readGroup(
+  slug: string,
+  previous: GroupRead | undefined,
+  signal: AbortSignal,
+): Promise<GroupRead> {
+  const outcome = await conditionalRead<Group>(previous?.etag, (headers) =>
+    apiClient.GET("/groups/{slug}", {
       params: { path: { slug } },
-    });
-  } catch (thrown) {
-    const error: ApiError =
-      thrown instanceof TypeError
-        ? { kind: "network" }
-        : { kind: "unexpected" };
+      headers,
+      signal,
+    }),
+  );
+  if (outcome.kind === "modified") {
+    return { group: outcome.data, etag: outcome.etag };
+  }
+  if (previous === undefined) {
+    // A validator that was never sent cannot have matched, and there is no body to fall back
+    // on, so this is a broken server rather than an unchanged group.
+    const error: ApiError = { kind: "unexpected", status: 304 };
     throw error;
   }
-  if (!result.response.ok) {
-    throw normalizeError(result.response, result.error);
-  }
-  return {
-    group: result.data as Group,
-    etag: result.response.headers.get("etag") ?? undefined,
-  };
+  return previous;
 }
 
 export function groupQueryOptions(slug: string) {
   return queryOptions({
     queryKey: groupDetailKey(slug),
-    queryFn: () => readGroup(slug),
+    queryFn: ({ client, signal }) =>
+      readGroup(
+        slug,
+        client.getQueryData<GroupRead>(groupDetailKey(slug)),
+        signal,
+      ),
   });
 }
 

@@ -98,6 +98,26 @@ export function selectionsEqual(a: Selection, b: Selection): boolean {
   return true;
 }
 
+/**
+ * The selected slots the server's vector no longer offers, sorted.
+ *
+ * A window that moves under an editor does not entitle anything to throw that editor's work
+ * away: the selection keeps them and the interface says which they are, because a slot that
+ * quietly vanished is a slot the user would go on believing they had marked.
+ */
+export function orphanedSlots(
+  selection: Selection,
+  slots: readonly string[],
+): string[] {
+  if (selection.size === 0) {
+    return [];
+  }
+  const offered = new Set(slots);
+  return [...selection.keys()]
+    .filter((instant) => !offered.has(instant))
+    .sort();
+}
+
 /** The number of heat levels, including the empty one. */
 export const HEAT_LEVELS = 5;
 

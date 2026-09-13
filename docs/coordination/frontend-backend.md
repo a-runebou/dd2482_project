@@ -190,6 +190,10 @@ None of these blocks the frontend.
   `manual_refresh_cooldown_seconds`.
 - `401` is not listed on most group and scheduling operations.
 - Section 6.3 uses `?duration=60`; the contract uses `duration_minutes`.
+- Every change to a group, its memberships, its availability, its proposals or its votes must
+    increment `version`, per ARCHITECTURE invariant 9, because the frontend now polls with
+    If-None-Match. A change that does not bump the version produces a 304 and a silently stale
+    view. Found in the frontend's own mock during T15b and fixed there.
 
 Response:
 

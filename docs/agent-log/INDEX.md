@@ -18,3 +18,4 @@
 2026-09-13 | visual-design-pass | Opus 5 | Quiet-utilitarian token set in Tailwind v4 @theme plus nine primitives in src/components/, with every existing screen rebuilt on them and no behaviour change; 174 tests became 212, all acceptance commands green.
 2026-09-13 | group-detail | Opus 5 | Added the /groups/:slug detail route with owner rename, invite rotation, deletion and member removal, member leaving, a shared ConfirmPanel and stateful MSW handlers; 31 new tests.
 2026-09-13 | availability-grid | Opus 5 | Availability grid shipped: per-local-day slot generation across the 25 October 2026 change, heatmap, drag and keyboard selection, full-replacement save, 318 tests passing.
+2026-09-13 | conditional-requests-polling | Opus 5 | 304 became an explicit non-error outcome in a new src/api/conditional.ts, the availability grid now polls the matrix conditionally at poll_interval_seconds while visible without ever discarding unsaved work, and 318 tests became 340.

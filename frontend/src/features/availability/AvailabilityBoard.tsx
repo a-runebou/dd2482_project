@@ -18,6 +18,7 @@ import {
   slotDate,
   slotLabel,
 } from "../../lib/slots";
+import { useConfig } from "../../api/config";
 import { groupQueryOptions } from "../groups/groupQueries";
 import {
   availabilityMatrixQueryOptions,
@@ -27,9 +28,12 @@ import {
 import { putMyAvailabilityMutationOptions } from "./availabilityMutations";
 import {
   CONFIRMED_MESSAGE,
+  OTHERS_CHANGED_MESSAGE,
   RECONCILED_MESSAGE,
+  STALE_POLL_MESSAGE,
   STALE_SLOTS_MESSAGE,
   describeAvailabilityError,
+  orphanedSelectionMessage,
 } from "./availabilityErrors";
 import {
   EMPTY_SELECTION,
@@ -38,6 +42,7 @@ import {
   cellState,
   detailFor,
   indexMatrix,
+  orphanedSlots,
   selectionFromPayload,
   selectionsEqual,
   toSelectionBody,
@@ -48,6 +53,7 @@ import { describeSlot } from "./slotDescription";
 import { SlotGrid } from "./SlotGrid";
 import { AvailabilityLegend } from "./AvailabilityLegend";
 
+type AvailabilityMatrix = components["schemas"]["AvailabilityMatrix"];
 type AvailabilitySelection = components["schemas"]["AvailabilitySelection"];
 
 function NotFoundPanel() {
@@ -93,6 +99,7 @@ function Notice({ children }: { children: React.ReactNode }) {
  */
 export function AvailabilityBoard({ slug }: { slug: string }) {
   const queryClient = useQueryClient();
+  const configQuery = useConfig();
   const groupQuery = useQuery(groupQueryOptions(slug));
   const group = groupQuery.data?.group;
 
@@ -122,9 +129,32 @@ export function AvailabilityBoard({ slug }: { slug: string }) {
     return { from: first, to: addMinutes(last, group.slot_minutes) };
   }, [generated, group]);
 
-  const matrixQuery = useQuery(availabilityMatrixQueryOptions(slug));
+  const saveMutation = useMutation(
+    putMyAvailabilityMutationOptions(queryClient, slug),
+  );
+
+  // The grid polls the matrix with If-None-Match while it is on screen (ARCHITECTURE 6.3), at
+  // the interval the server recommends; the number is never written here (CLAUDE.md rule 7).
+  // `refetchIntervalInBackground: false` is what stops the polling when the document is hidden,
+  // and the same focus manager refetches once when it becomes visible again.
+  //
+  // The interval is switched off entirely while a save is in flight, so that a poll cannot
+  // overlap the write, and so that the refetch the write's invalidation triggers is the only
+  // one that follows a save: turning the interval back on restarts its timer from zero.
+  const pollSeconds = configQuery.data?.poll_interval_seconds;
+  const pollInterval: number | false =
+    pollSeconds === undefined || saveMutation.isPending
+      ? false
+      : pollSeconds * 1000;
+
+  const matrixQuery = useQuery({
+    ...availabilityMatrixQueryOptions(slug),
+    refetchInterval: pollInterval,
+    refetchIntervalInBackground: false,
+  });
   const myQuery = useQuery(myAvailabilityQueryOptions(slug));
   const busyQuery = useQuery(busyQueryOptions(busyRange));
+  const matrix = matrixQuery.data?.data;
 
   const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION);
   const [baseline, setBaseline] = useState<Selection>(EMPTY_SELECTION);
@@ -132,17 +162,41 @@ export function AvailabilityBoard({ slug }: { slug: string }) {
     undefined,
   );
   const [inspected, setInspected] = useState<string | undefined>(undefined);
+  const [seenMatrix, setSeenMatrix] = useState<AvailabilityMatrix | undefined>(
+    undefined,
+  );
+  const [othersChanged, setOthersChanged] = useState(false);
   const [confirmedByServer, setConfirmedByServer] = useState(false);
+
+  const isDirty = !selectionsEqual(selection, baseline);
 
   // Adjusting state while rendering, rather than in an effect, so the grid never paints one
   // frame of an empty selection over a stored one. A refetch after a save arrives as a new
   // object and reseeds both the selection and the baseline, which is what makes Save go quiet.
+  //
+  // A read that lands while there are unsaved changes is deliberately not applied: a poll, a
+  // refetch on becoming visible again, or another tab's save must never overwrite work in
+  // progress. It is not marked as seeded either, so it seeds as soon as there is nothing to
+  // lose — after a save, or after Discard changes.
   const stored = myQuery.data;
-  if (stored !== undefined && stored !== seeded) {
+  if (stored !== undefined && stored !== seeded && !isDirty) {
     const next = selectionFromPayload(stored);
     setSeeded(stored);
     setBaseline(next);
     setSelection(next);
+  }
+
+  // Someone else's answer arriving mid-edit changes the heatmap under the user's hands, so it
+  // is said out loud rather than left to be noticed. The flag clears itself once there is
+  // nothing unsaved, which is what a save or a discard does.
+  if (matrix !== undefined && matrix !== seenMatrix) {
+    setSeenMatrix(matrix);
+    if (isDirty) {
+      setOthersChanged(true);
+    }
+  }
+  if (othersChanged && !isDirty) {
+    setOthersChanged(false);
   }
 
   const idempotency = useRef<{ body: string; key: string } | undefined>(
@@ -153,11 +207,6 @@ export function AvailabilityBoard({ slug }: { slug: string }) {
   // one request rather than two identical ones racing each other.
   const saving = useRef(false);
 
-  const saveMutation = useMutation(
-    putMyAvailabilityMutationOptions(queryClient, slug),
-  );
-
-  const isDirty = !selectionsEqual(selection, baseline);
   const saveOutcome =
     saveMutation.error === null
       ? undefined
@@ -178,18 +227,18 @@ export function AvailabilityBoard({ slug }: { slug: string }) {
   // The server's vector is authoritative for rendering; the generated one is only ever compared
   // against it. `slots` is therefore the server's, normalized so two spellings compare equal.
   const serverSlots = useMemo(
-    () => (matrixQuery.data?.slots ?? []).map(normalizeInstant),
-    [matrixQuery.data],
+    () => (matrix?.slots ?? []).map(normalizeInstant),
+    [matrix],
   );
   const reconciled = useMemo(() => {
-    if (matrixQuery.data === undefined || generated.length === 0) {
+    if (matrix === undefined || generated.length === 0) {
       return true;
     }
     return (
       serverSlots.length === generated.length &&
       serverSlots.every((slot, index) => slot === generated[index])
     );
-  }, [matrixQuery.data, generated, serverSlots]);
+  }, [matrix, generated, serverSlots]);
 
   const gridModel = useMemo(
     () =>
@@ -199,12 +248,27 @@ export function AvailabilityBoard({ slug }: { slug: string }) {
     [serverSlots, group],
   );
   const details = useMemo(
-    () =>
-      matrixQuery.data === undefined
-        ? new Map()
-        : indexMatrix(matrixQuery.data),
-    [matrixQuery.data],
+    () => (matrix === undefined ? new Map() : indexMatrix(matrix)),
+    [matrix],
   );
+
+  // Slots the user has marked that the server has since stopped offering. They stay in the
+  // selection; all that happens is that they are named, because the grid can only draw cells
+  // that are in the vector it renders.
+  const orphanedLabels = useMemo(() => {
+    if (matrix === undefined || group === undefined) {
+      return [];
+    }
+    return orphanedSlots(selection, serverSlots).map(
+      (instant) =>
+        `${slotDate(instant, group.timezone)} ${slotLabel(instant, group.timezone)}`,
+    );
+  }, [matrix, group, selection, serverSlots]);
+
+  // A poll that failed leaves the last known matrix on screen and says only that it may be
+  // stale. The query client has already retried a network failure by the time this is true,
+  // so a single dropped request never reaches the user.
+  const pollFailed = matrixQuery.isError && matrix !== undefined;
   const busy = useMemo(
     () =>
       group === undefined
@@ -301,6 +365,11 @@ export function AvailabilityBoard({ slug }: { slug: string }) {
 
       {readOnly && <Notice>{CONFIRMED_MESSAGE}</Notice>}
       {!reconciled && <Notice>{RECONCILED_MESSAGE}</Notice>}
+      {othersChanged && <Notice>{OTHERS_CHANGED_MESSAGE}</Notice>}
+      {orphanedLabels.length > 0 && (
+        <Notice>{orphanedSelectionMessage(orphanedLabels)}</Notice>
+      )}
+      {pollFailed && <Notice>{STALE_POLL_MESSAGE}</Notice>}
 
       {matrixQuery.isPending ? (
         <p
@@ -310,7 +379,7 @@ export function AvailabilityBoard({ slug }: { slug: string }) {
           <Spinner />
           Loading the grid…
         </p>
-      ) : matrixQuery.data === undefined ? (
+      ) : matrix === undefined ? (
         <div className="mt-6">
           <ApiErrorNotice
             error={matrixQuery.error as ApiError}
@@ -342,7 +411,7 @@ export function AvailabilityBoard({ slug }: { slug: string }) {
         </>
       )}
 
-      {!readOnly && matrixQuery.data !== undefined && (
+      {!readOnly && matrix !== undefined && (
         <div className="mt-5 flex flex-wrap items-center gap-3">
           <Button
             variant="primary"

@@ -1,5 +1,6 @@
 import { queryOptions, skipToken } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
+import { cachedConditionalRead, type CachedRead } from "../../api/conditional";
 import { unwrap } from "../../api/errors";
 import type { components } from "../../api/generated/schema";
 
@@ -25,14 +26,30 @@ export const myAvailabilityKey = (slug: string) =>
 export const busyKey = (from: string, to: string) =>
   ["busy", from, to] as const;
 
+/** The matrix as it is cached: the body, and the ETag that validated it. */
+export type AvailabilityMatrixRead = CachedRead<AvailabilityMatrix>;
+
+/**
+ * The matrix, read conditionally so that the grid can poll it cheaply (ARCHITECTURE 6.3). The
+ * previous read is taken from the cache rather than from a ref, so the validator and the body
+ * it belongs to can never drift apart, and a 304 puts the identical object back.
+ *
+ * The interval itself is not set here: it comes from `poll_interval_seconds` in GET /config
+ * and is passed by the component that mounts the grid, because only that component knows
+ * whether it is visible and whether a save is in flight.
+ */
 export function availabilityMatrixQueryOptions(slug: string) {
   return queryOptions({
     queryKey: availabilityKey(slug),
-    queryFn: () =>
-      unwrap<AvailabilityMatrix>(
-        apiClient.GET("/groups/{slug}/availability", {
-          params: { path: { slug } },
-        }),
+    queryFn: ({ client, signal }) =>
+      cachedConditionalRead<AvailabilityMatrix>(
+        client.getQueryData<AvailabilityMatrixRead>(availabilityKey(slug)),
+        (headers) =>
+          apiClient.GET("/groups/{slug}/availability", {
+            params: { path: { slug } },
+            headers,
+            signal,
+          }),
       ),
   });
 }

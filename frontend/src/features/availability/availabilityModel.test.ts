@@ -9,6 +9,7 @@ import {
   heatLevel,
   indexMatrix,
   nextState,
+  orphanedSlots,
   selectionFromPayload,
   selectionsEqual,
   toSelectionBody,
@@ -226,5 +227,29 @@ describe("busySlots", () => {
 
   it("is empty when there are no blocks", () => {
     expect(busySlots([A, B], [], 30).size).toBe(0);
+  });
+});
+
+describe("orphanedSlots", () => {
+  it("is empty when every selected slot is still offered", () => {
+    const selection = applyState(EMPTY_SELECTION, [A, B], "available");
+
+    expect(orphanedSlots(selection, [A, B, C])).toEqual([]);
+  });
+
+  it("names the selected slots the server's vector no longer contains, in order", () => {
+    const selection = applyState(EMPTY_SELECTION, [C, A, B], "preferred");
+
+    expect(orphanedSlots(selection, [B])).toEqual([A, C]);
+  });
+
+  it("is empty for an empty selection, whatever the vector", () => {
+    expect(orphanedSlots(EMPTY_SELECTION, [])).toEqual([]);
+  });
+
+  it("counts everything as orphaned when the server offers no slots at all", () => {
+    const selection = applyState(EMPTY_SELECTION, [A], "available");
+
+    expect(orphanedSlots(selection, [])).toEqual([A]);
   });
 });

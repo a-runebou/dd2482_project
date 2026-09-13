@@ -80,8 +80,36 @@ export function resetMockGroups(): void {
  */
 let mySelections: Record<string, AvailabilitySelection> = {};
 
+/**
+ * Slots another member has marked available since the fixture was written, per slug. This is
+ * what a second tab saving its own availability looks like from here: the matrix changes and
+ * the group version moves, so the next conditional read is a 200 rather than a 304.
+ */
+let otherMemberMarks: Record<string, number[]> = {};
+
 export function resetMockAvailability(): void {
   mySelections = {};
+  otherMemberMarks = {};
+}
+
+/**
+ * Bump a group's version, which is what the ETag is derived from, so that the next read with
+ * If-None-Match answers 200 instead of 304. Exported for tests of the polling loop.
+ */
+export function advanceMockGroupVersion(slug: string): void {
+  const group = groups[slug];
+  if (group !== undefined) {
+    groups[slug] = { ...group, version: group.version + 1 };
+  }
+}
+
+/** Another member marks one slot available, and the version moves with it. */
+export function markMockParticipantAvailable(
+  slug: string,
+  slotIndex: number,
+): void {
+  otherMemberMarks[slug] = [...(otherMemberMarks[slug] ?? []), slotIndex];
+  advanceMockGroupVersion(slug);
 }
 
 function storedSelection(slug: string): AvailabilitySelection {
@@ -121,8 +149,16 @@ function availabilityMatrix(
   const preferredSet = new Set(preferred);
   const responded = stored.available.length + stored.preferred.length > 0;
 
+  const marks = otherMemberMarks[group.slug] ?? [];
   const participants = [
-    ...dstParticipantsFixture,
+    ...dstParticipantsFixture.map((participant, index) =>
+      index === 1 && marks.length > 0
+        ? {
+            ...participant,
+            available: [...new Set([...participant.available, ...marks])],
+          }
+        : participant,
+    ),
     {
       user_id: userFixture.id,
       display_name: userFixture.display_name,
@@ -155,6 +191,21 @@ function availabilityMatrix(
       .length,
     member_count: participants.length,
   };
+}
+
+/**
+ * A 304 when the caller's validator still matches the group's, and null when it does not, so a
+ * polled read costs a header exchange and no body (ARCHITECTURE 6.3). A 304 carries no body at
+ * all, which is what makes the client's cached copy the only copy.
+ */
+function notModified(
+  request: Request,
+  group: Group,
+): HttpResponse<null> | null {
+  const ifNoneMatch = request.headers.get("If-None-Match");
+  return ifNoneMatch === groupEtag(group)
+    ? new HttpResponse(null, { status: 304, headers: { ETag: ifNoneMatch } })
+    : null;
 }
 
 /** One path parameter, which MSW types as string | readonly string[]. */
@@ -213,12 +264,16 @@ export const handlers = [
   // A read always carries the ETag, because every mutation below insists on a matching
   // If-Match when the client sends one. Unknown slugs are 404 group_not_found, which is also
   // what a non-member receives: the handler cannot tell the two apart, and neither can the UI.
-  http.get(mockUrl("/groups/:slug"), ({ params }) => {
+  http.get(mockUrl("/groups/:slug"), ({ params, request }) => {
     const group = groups[pathParam(params.slug)];
     if (group === undefined) {
       return problemResponse(groupNotFoundProblem);
     }
-    return HttpResponse.json(group, { headers: { ETag: groupEtag(group) } });
+    const unchanged = notModified(request, group);
+    return (
+      unchanged ??
+      HttpResponse.json(group, { headers: { ETag: groupEtag(group) } })
+    );
   }),
   http.get(mockUrl("/groups/:slug/members"), ({ params }) => {
     const roster = members[pathParam(params.slug)];
@@ -284,14 +339,24 @@ export const handlers = [
       return problemResponse(notFoundProblem);
     }
     members[slug] = { ...roster, data: remaining };
-    groups[slug] = { ...group, member_count: remaining.length };
+    // The version moves with the representation, because the ETag is derived from it: a group
+    // whose member_count changed without a new validator would answer 304 and look unchanged.
+    groups[slug] = {
+      ...group,
+      member_count: remaining.length,
+      version: group.version + 1,
+    };
     return new HttpResponse(null, { status: 204 });
   }),
   // --- Availability ---------------------------------------------------------------------
-  http.get(mockUrl("/groups/:slug/availability"), ({ params }) => {
+  http.get(mockUrl("/groups/:slug/availability"), ({ params, request }) => {
     const group = groups[pathParam(params.slug)];
     if (group === undefined) {
       return problemResponse(groupNotFoundProblem);
+    }
+    const unchanged = notModified(request, group);
+    if (unchanged !== null) {
+      return unchanged;
     }
     const matrix = availabilityMatrix(group);
     return HttpResponse.json(matrix, {

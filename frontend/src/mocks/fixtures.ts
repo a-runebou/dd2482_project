@@ -19,6 +19,16 @@ export const configFixture: components["schemas"]["Config"] = {
   build_sha: "test-sha",
 };
 
+/**
+ * The same configuration with a one-second polling interval, for tests of the availability
+ * grid's polling: they run on real timers, so the interval has to be short enough to wait for
+ * and still be the integer number of seconds the contract's Config schema types it as.
+ */
+export const fastPollingConfigFixture: components["schemas"]["Config"] = {
+  ...configFixture,
+  poll_interval_seconds: 1,
+};
+
 export const serviceUnavailableProblem: components["schemas"]["Problem"] = {
   type: "about:blank",
   title: "Service Unavailable",
