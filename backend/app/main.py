@@ -13,6 +13,9 @@ from app.api.errors import (
     validation_exception_handler,
 )
 from app.api.idempotency import IdempotencyMiddleware
+from app.api.metrics import (
+    router as metrics_router,
+)
 from app.api.router import api_router
 from app.infra.circuit import CircuitOpenError
 from app.infra.db import database_ready
@@ -21,6 +24,10 @@ app = FastAPI(title="Schedular API")
 
 app.add_middleware(
     IdempotencyMiddleware,
+)
+
+app.include_router(
+    metrics_router,
 )
 
 app.include_router(
