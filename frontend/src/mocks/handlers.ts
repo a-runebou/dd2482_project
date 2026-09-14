@@ -1,10 +1,17 @@
 import { http, HttpResponse } from "msw";
 import type { components } from "../api/generated/schema";
-import { generateSlots, normalizeInstant } from "../lib/slots";
+import {
+  addMinutes,
+  generateSlots,
+  normalizeInstant,
+  slotDate,
+} from "../lib/slots";
 
 type Group = components["schemas"]["Group"];
 type MemberPage = components["schemas"]["MemberPage"];
 type AvailabilitySelection = components["schemas"]["AvailabilitySelection"];
+type Proposal = components["schemas"]["Proposal"];
+type Suggestion = components["schemas"]["Suggestion"];
 import {
   configFixture,
   dstBusyFixture,
@@ -20,6 +27,8 @@ import {
   membersBySlugFixture,
   notFoundProblem,
   notOwnerProblem,
+  proposalLimitReachedProblem,
+  proposalsBySlugFixture,
   refreshedSessionFixture,
   rotatedInviteUrl,
   slotNotInWindowProblem,
@@ -211,6 +220,118 @@ function notModified(
 /** One path parameter, which MSW types as string | readonly string[]. */
 function pathParam(value: string | readonly string[] | undefined): string {
   return typeof value === "string" ? value : (value?.[0] ?? "");
+}
+
+/**
+ * Proposals per slug, kept in module state so that a creation and a deletion are visible in the
+ * list the way they would be from a server. Reset it in a beforeEach alongside resetMockGroups;
+ * MSW's resetHandlers does not touch module state.
+ */
+let proposals: Record<string, Proposal[]> = structuredClone(
+  proposalsBySlugFixture,
+);
+
+/**
+ * The revision behind the proposals ETag. The list is its own resource with its own validator,
+ * so it is counted separately from the group version; like the group ETag, its shape is opaque
+ * and not reconstructible from the body, so a test asserting If-None-Match is proving the client
+ * echoed what it was given.
+ */
+let proposalRevisions: Record<string, number> = {};
+
+export function resetMockProposals(): void {
+  proposals = structuredClone(proposalsBySlugFixture);
+  proposalRevisions = {};
+}
+
+function proposalsEtag(slug: string): string {
+  return `W/"proposals-${slug}-r${proposalRevisions[slug] ?? 0}"`;
+}
+
+function bumpProposals(slug: string): void {
+  proposalRevisions[slug] = (proposalRevisions[slug] ?? 0) + 1;
+}
+
+/** The next proposal id. Sequential rather than random, so a failure names the same proposal twice. */
+let nextProposalId = 1;
+
+function mintProposalId(): string {
+  const suffix = String(nextProposalId).padStart(12, "0");
+  nextProposalId += 1;
+  return `e5d4c3b2-0000-4000-8000-${suffix}`;
+}
+
+/**
+ * Suggestions computed from the same matrix the availability handler serves, so that answering
+ * the grid really does change what this returns. It follows ARCHITECTURE 5.1 closely enough to
+ * be useful — windows of `duration_minutes / slot_minutes` consecutive slots that stay inside
+ * one local day, scored as the mean of `2 * preferred + available` over the window, best first
+ * — but it is a mock, not a second implementation to be trusted: the backend's is authoritative.
+ */
+function computeSuggestions(
+  group: Group,
+  durationMinutes: number,
+  limit: number,
+): Suggestion[] {
+  const matrix = availabilityMatrix(group);
+  const slots = matrix.slots;
+  const span = Math.round(durationMinutes / group.slot_minutes);
+  const stepMillis = group.slot_minutes * 60_000;
+  const found: Suggestion[] = [];
+
+  for (let start = 0; start + span <= slots.length; start += 1) {
+    const window = slots.slice(start, start + span);
+    const first = window[0]!;
+    const last = window[span - 1]!;
+    // A window must be contiguous in real time and stay inside one local day, which is what
+    // rules out jumping the gap between one day's window end and the next day's start.
+    if (Date.parse(last) - Date.parse(first) !== (span - 1) * stepMillis) {
+      continue;
+    }
+    if (slotDate(first, group.timezone) !== slotDate(last, group.timezone)) {
+      continue;
+    }
+    const indices = window.map((_, offset) => start + offset);
+    const responders = matrix.participants.filter(
+      (participant) => participant.responded,
+    );
+    const marked = (
+      participant: (typeof matrix.participants)[number],
+      index: number,
+    ): boolean =>
+      participant.available.includes(index) ||
+      participant.preferred.includes(index);
+    const available = responders.filter((participant) =>
+      indices.every((index) => marked(participant, index)),
+    );
+    const availableIds = new Set(available.map((p) => p.user_id));
+    const preferred = available.filter((participant) =>
+      indices.every((index) => participant.preferred.includes(index)),
+    );
+    const score =
+      indices.reduce((total, index) => {
+        const cell = matrix.aggregate[index]!;
+        return total + 2 * cell.preferred_count + cell.available_count;
+      }, 0) / span;
+
+    found.push({
+      start_at: first,
+      end_at: addMinutes(last, group.slot_minutes),
+      score,
+      available_user_ids: available.map((p) => p.user_id),
+      preferred_user_ids: preferred.map((p) => p.user_id),
+      missing_user_ids: matrix.participants
+        .filter((p) => !availableIds.has(p.user_id))
+        .map((p) => p.user_id),
+    });
+  }
+
+  return found
+    .sort(
+      (a, b) =>
+        b.score - a.score || Date.parse(a.start_at) - Date.parse(b.start_at),
+    )
+    .slice(0, limit);
 }
 
 // Handlers match the absolute base URL the runtime client uses, so a request to a different
@@ -426,5 +547,103 @@ export const handlers = [
       ),
       next_cursor: null,
     });
+  }),
+  // --- Suggestions and proposals ---------------------------------------------------------
+  // Computed on request and never stored (ARCHITECTURE 5.1). The defaults here are the
+  // contract's, applied when the client omits a parameter; the client always sends both.
+  http.get(mockUrl("/groups/:slug/suggestions"), ({ params, request }) => {
+    const group = groups[pathParam(params.slug)];
+    if (group === undefined) {
+      return problemResponse(groupNotFoundProblem);
+    }
+    const query = new URL(request.url).searchParams;
+    const duration = Number(query.get("duration_minutes") ?? 60);
+    const limit = Number(query.get("limit") ?? 5);
+    return HttpResponse.json({
+      data: computeSuggestions(group, duration, limit),
+      next_cursor: null,
+    });
+  }),
+  http.get(mockUrl("/groups/:slug/proposals"), ({ params, request }) => {
+    const slug = pathParam(params.slug);
+    if (groups[slug] === undefined) {
+      return problemResponse(groupNotFoundProblem);
+    }
+    const etag = proposalsEtag(slug);
+    if (request.headers.get("If-None-Match") === etag) {
+      return new HttpResponse(null, { status: 304, headers: { ETag: etag } });
+    }
+    return HttpResponse.json(
+      { data: proposals[slug] ?? [], next_cursor: null },
+      { headers: { ETag: etag } },
+    );
+  }),
+  // The order of the checks mirrors the backend: existence, then the group's state, then the
+  // role, then the limit, then the window itself.
+  http.post(mockUrl("/groups/:slug/proposals"), async ({ params, request }) => {
+    const slug = pathParam(params.slug);
+    const group = groups[slug];
+    if (group === undefined) {
+      return problemResponse(groupNotFoundProblem);
+    }
+    if (group.state === "confirmed") {
+      return problemResponse(groupConfirmedProblem);
+    }
+    if (group.my_role !== "owner") {
+      return problemResponse(notOwnerProblem);
+    }
+    const existing = proposals[slug] ?? [];
+    if (existing.length >= configFixture.max_proposals_per_group) {
+      return problemResponse(proposalLimitReachedProblem);
+    }
+    const body =
+      (await request.json()) as components["schemas"]["ProposalCreate"];
+    const allowed = new Set(slotVector(group));
+    const startAt = normalizeInstant(body.start_at);
+    const endAt = normalizeInstant(body.end_at);
+    if (
+      !allowed.has(startAt) ||
+      Date.parse(endAt) <= Date.parse(startAt) ||
+      !allowed.has(addMinutes(endAt, -group.slot_minutes))
+    ) {
+      return problemResponse(slotNotInWindowProblem);
+    }
+    const created: Proposal = {
+      id: mintProposalId(),
+      start_at: startAt,
+      end_at: endAt,
+      origin: body.origin ?? "manual",
+      created_by: userFixture.id,
+      votes: { yes: [], maybe: [], no: [] },
+      my_vote: null,
+      created_at: "2026-09-14T09:00:00Z",
+    };
+    proposals[slug] = [...existing, created];
+    bumpProposals(slug);
+    advanceMockGroupVersion(slug);
+    return HttpResponse.json(created, { status: 201 });
+  }),
+  http.delete(mockUrl("/groups/:slug/proposals/:proposalId"), ({ params }) => {
+    const slug = pathParam(params.slug);
+    const group = groups[slug];
+    if (group === undefined) {
+      return problemResponse(groupNotFoundProblem);
+    }
+    if (group.state === "confirmed") {
+      return problemResponse(groupConfirmedProblem);
+    }
+    if (group.my_role !== "owner") {
+      return problemResponse(notOwnerProblem);
+    }
+    const existing = proposals[slug] ?? [];
+    const proposalId = pathParam(params.proposalId);
+    const remaining = existing.filter((proposal) => proposal.id !== proposalId);
+    if (remaining.length === existing.length) {
+      return problemResponse(notFoundProblem);
+    }
+    proposals[slug] = remaining;
+    bumpProposals(slug);
+    advanceMockGroupVersion(slug);
+    return new HttpResponse(null, { status: 204 });
   }),
 ];

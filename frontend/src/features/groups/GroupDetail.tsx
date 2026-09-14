@@ -128,12 +128,16 @@ export function GroupDetail({ slug }: { slug: string }) {
           )}
           <Summary group={group} />
           {/* Every member answers the grid, so this is not gated on the owner role. */}
-          <Link
-            to={`/groups/${slug}/availability`}
-            className={`mt-4 inline-block ${LINK}`}
-          >
-            Open the availability grid
-          </Link>
+          <div className="mt-4 flex flex-wrap gap-4">
+            <Link to={`/groups/${slug}/availability`} className={LINK}>
+              Open the availability grid
+            </Link>
+            {/* Suggestions and proposals are readable by every member; only the controls
+                inside are the owner's. */}
+            <Link to={`/groups/${slug}/proposals`} className={LINK}>
+              See the proposals
+            </Link>
+          </div>
         </>
       )}
 

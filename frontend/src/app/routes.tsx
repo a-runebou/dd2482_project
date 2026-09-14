@@ -6,6 +6,7 @@ import { GroupsPage } from "../pages/GroupsPage";
 import { CreateGroupPage } from "../pages/CreateGroupPage";
 import { GroupDetailPage } from "../pages/GroupDetailPage";
 import { AvailabilityPage } from "../pages/AvailabilityPage";
+import { ProposalsPage } from "../pages/ProposalsPage";
 import { SignInPage } from "../pages/SignInPage";
 import { AuthCallbackPage } from "../pages/AuthCallbackPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
@@ -29,6 +30,7 @@ export const appRoutes: RouteObject[] = [
         path: "groups/:slug/availability",
         element: <AvailabilityPage />,
       },
+      { path: "groups/:slug/proposals", element: <ProposalsPage /> },
       { path: "sign-in", element: <SignInPage /> },
       { path: "auth/callback", element: <AuthCallbackPage /> },
       { path: "*", element: <NotFoundPage /> },

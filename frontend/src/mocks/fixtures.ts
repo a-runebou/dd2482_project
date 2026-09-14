@@ -479,3 +479,94 @@ export const dbCircuitOpenProblem: components["schemas"]["Problem"] = {
   detail: "The database circuit breaker is open.",
   code: "db_circuit_open",
 };
+
+// --- Suggestions and proposals ----------------------------------------------------------
+
+type Proposal = components["schemas"]["Proposal"];
+
+/**
+ * A copy of the daylight-saving group that the signed-in user owns, so the proposals screen has
+ * a group where the owner controls are visible and every instant still straddles the
+ * 25 October 2026 change. Its roster is the same as the grid's, so a suggestion's user ids all
+ * resolve to display names.
+ */
+export const proposalsGroupFixture: Group = {
+  ...dstGroupFixture,
+  slug: "4nP7uKd3Xv9C",
+  name: "Reading circle",
+  description: "Owned by the signed-in user, for the proposals screen.",
+  my_role: "owner",
+  version: 4,
+};
+
+/** The same group confirmed, so the read-only branch of the proposals screen has a subject. */
+export const proposalsConfirmedGroupFixture: Group = {
+  ...proposalsGroupFixture,
+  slug: "5qS9vLe4Yw1D",
+  name: "Reading circle, settled",
+  state: "confirmed",
+  version: 11,
+};
+
+groupsBySlugFixture[proposalsGroupFixture.slug] = proposalsGroupFixture;
+groupsBySlugFixture[proposalsConfirmedGroupFixture.slug] =
+  proposalsConfirmedGroupFixture;
+membersBySlugFixture[proposalsGroupFixture.slug] = dstMembersPageFixture;
+membersBySlugFixture[proposalsConfirmedGroupFixture.slug] =
+  dstMembersPageFixture;
+
+/**
+ * Two proposals of the two origins, deliberately stored out of order so that a test of the
+ * rendered order is testing the sort rather than the fixture. Both windows are slot-aligned
+ * inside the group's daily window: 2026-10-24T23:00Z is 01:00 local on the 25th, still CEST,
+ * and 2026-10-26T00:00Z is 01:00 local on the 26th, by then CET.
+ */
+export const manualProposalFixture: Proposal = {
+  id: "d4c3b2a1-0000-4000-8000-000000000001",
+  start_at: "2026-10-26T00:00:00Z",
+  end_at: "2026-10-26T01:00:00Z",
+  origin: "manual",
+  created_by: dstGroupFixture.owner_id,
+  votes: { yes: [], maybe: [], no: [userFixture.id] },
+  my_vote: "no",
+  created_at: "2026-09-10T08:00:00Z",
+};
+
+export const suggestedProposalFixture: Proposal = {
+  id: "d4c3b2a1-0000-4000-8000-000000000002",
+  start_at: "2026-10-24T23:00:00Z",
+  end_at: "2026-10-25T00:30:00Z",
+  origin: "suggested",
+  created_by: dstGroupFixture.owner_id,
+  votes: {
+    yes: [dstGroupFixture.owner_id, dstParticipantsFixture[1]!.user_id],
+    maybe: [dstParticipantsFixture[2]!.user_id],
+    no: [],
+  },
+  my_vote: null,
+  created_at: "2026-09-11T08:00:00Z",
+};
+
+export const proposalsBySlugFixture: Record<string, Proposal[]> = {
+  [proposalsGroupFixture.slug]: [
+    manualProposalFixture,
+    suggestedProposalFixture,
+  ],
+  [proposalsConfirmedGroupFixture.slug]: [suggestedProposalFixture],
+};
+
+export const proposalLimitReachedProblem: components["schemas"]["Problem"] = {
+  type: "about:blank",
+  title: "Conflict",
+  status: 409,
+  detail: "This group already has as many proposals as it may have.",
+  code: "proposal_limit_reached",
+};
+
+export const forbiddenProblem: components["schemas"]["Problem"] = {
+  type: "about:blank",
+  title: "Forbidden",
+  status: 403,
+  detail: "Not allowed.",
+  code: "forbidden",
+};

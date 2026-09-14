@@ -11,12 +11,14 @@ import { mockUrl } from "../mocks/urls";
 import {
   dstGroupFixture,
   groupsPage1Fixture,
+  proposalsGroupFixture,
   ownerGroupFixture,
   userFixture,
 } from "../mocks/fixtures";
 import {
   resetMockAvailability,
   resetMockGroups,
+  resetMockProposals,
   setMockRefreshCookie,
 } from "../mocks/handlers";
 import { clearSession } from "../api/session";
@@ -27,6 +29,7 @@ beforeEach(() => {
   setMockRefreshCookie(true);
   resetMockGroups();
   resetMockAvailability();
+  resetMockProposals();
 });
 
 afterEach(() => {
@@ -213,6 +216,29 @@ describe("routing", () => {
 
     expect(
       await screen.findByRole("grid", { name: /availability grid/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the proposals screen at /groups/:slug/proposals after boot", async () => {
+    renderApp(appRoutes, [`/groups/${proposalsGroupFixture.slug}/proposals`]);
+
+    expect(
+      await screen.findByRole("heading", { name: "Proposals" }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText("Sun 25 Oct 2026, 01:00 to 02:30"),
+    ).toBeInTheDocument();
+  });
+
+  it("navigates from a group's detail page to its proposals", async () => {
+    renderApp(appRoutes, [`/groups/${proposalsGroupFixture.slug}`]);
+
+    fireEvent.click(
+      await screen.findByRole("link", { name: /see the proposals/i }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Proposals" }),
     ).toBeInTheDocument();
   });
 
