@@ -16,6 +16,8 @@ class Settings:
     environment: str
     database_url: str
 
+    ops_alert_email: str | None
+
     smtp_host: str
     smtp_port: int
     smtp_username: str | None
@@ -78,5 +80,8 @@ def get_settings() -> Settings:
         smtp_from=os.getenv(
             "SMTP_FROM",
             "schedular@example.local",
+        ),
+        ops_alert_email=os.getenv(
+            "OPS_ALERT_EMAIL",
         ),
     )

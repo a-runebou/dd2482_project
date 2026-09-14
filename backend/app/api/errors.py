@@ -6,6 +6,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.infra.circuit import CircuitOpenError
+
 
 @dataclass(frozen=True)
 class FieldError:
@@ -162,4 +164,25 @@ def http_exception_handler(
         title=title,
         detail=detail,
         headers=exc.headers,
+    )
+
+
+def circuit_open_exception_handler(
+    request: Request,
+    exc: CircuitOpenError,
+) -> JSONResponse:
+    del exc
+
+    return problem_response(
+        request=request,
+        status_code=503,
+        code="db_circuit_open",
+        title="Database temporarily unavailable",
+        detail=(
+            "Database requests are temporarily "
+            "disabled while the service recovers."
+        ),
+        headers={
+            "Retry-After": "30",
+        },
     )
