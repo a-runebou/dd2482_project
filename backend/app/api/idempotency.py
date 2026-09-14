@@ -89,9 +89,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         if request.method not in MUTATING_METHODS:
             return await call_next(request)
 
-        raw_key = request.headers.get(
-            "Idempotency-Key"
-        )
+        raw_key = request.headers.get("Idempotency-Key")
 
         if raw_key is None:
             return await call_next(request)
@@ -104,9 +102,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                 status_code=400,
                 code="validation_failed",
                 title="Invalid Idempotency-Key",
-                detail=(
-                    "Idempotency-Key must be a UUID."
-                ),
+                detail=("Idempotency-Key must be a UUID."),
             )
 
         body = await request.body()
@@ -120,11 +116,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                 key,
             )
 
-            if (
-                record is not None
-                and now - record.created_at
-                > IDEMPOTENCY_TTL
-            ):
+            if record is not None and now - record.created_at > IDEMPOTENCY_TTL:
                 db.delete(record)
                 db.commit()
                 record = None
@@ -152,16 +144,12 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
 
         response = await call_next(request)
 
-        response_body = await read_response_body(
-            response
-        )
+        response_body = await read_response_body(response)
 
         response_headers = {
             header_name.lower(): header_value
-            for header_name, header_value
-            in response.headers.items()
-            if header_name.lower()
-            not in IGNORED_RESPONSE_HEADERS
+            for header_name, header_value in response.headers.items()
+            if header_name.lower() not in IGNORED_RESPONSE_HEADERS
         }
 
         if response.status_code < 500:

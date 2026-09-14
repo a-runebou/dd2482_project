@@ -179,8 +179,7 @@ def circuit_open_exception_handler(
         code="db_circuit_open",
         title="Database temporarily unavailable",
         detail=(
-            "Database requests are temporarily "
-            "disabled while the service recovers."
+            "Database requests are temporarily disabled while the service recovers."
         ),
         headers={
             "Retry-After": "30",

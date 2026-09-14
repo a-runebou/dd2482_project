@@ -26,22 +26,16 @@ class CircuitBreaker:
         self,
         *,
         clock: Callable[[], float] = time.monotonic,
-        transition_callback: (
-            TransitionCallback | None
-        ) = None,
+        transition_callback: (TransitionCallback | None) = None,
     ) -> None:
         self._clock = clock
-        self._transition_callback = (
-            transition_callback
-        )
+        self._transition_callback = transition_callback
 
         self._lock = threading.Lock()
 
         self._state = CircuitState.CLOSED
 
-        self._history: deque[
-            tuple[float, bool]
-        ] = deque(maxlen=20)
+        self._history: deque[tuple[float, bool]] = deque(maxlen=20)
 
         self._consecutive_failures = 0
 
@@ -99,17 +93,12 @@ class CircuitBreaker:
                 if now - self._opened_at < 30:
                     raise CircuitOpenError
 
-                callback = self._transition_locked(
-                    CircuitState.HALF_OPEN
-                )
+                callback = self._transition_locked(CircuitState.HALF_OPEN)
 
                 self._probe_in_flight = False
                 self._half_open_successes = 0
 
-            if (
-                self._state
-                == CircuitState.HALF_OPEN
-            ):
+            if self._state == CircuitState.HALF_OPEN:
                 if self._probe_in_flight:
                     raise CircuitOpenError
 
@@ -130,10 +119,7 @@ class CircuitBreaker:
         with self._lock:
             now = self._clock()
 
-            if (
-                self._state
-                == CircuitState.HALF_OPEN
-            ):
+            if self._state == CircuitState.HALF_OPEN:
                 self._probe_in_flight = False
                 self._half_open_successes += 1
 
@@ -141,18 +127,12 @@ class CircuitBreaker:
                     self._consecutive_failures = 0
                     self._history.clear()
 
-                    callback = (
-                        self._transition_locked(
-                            CircuitState.CLOSED
-                        )
-                    )
+                    callback = self._transition_locked(CircuitState.CLOSED)
 
             elif self._state == CircuitState.CLOSED:
                 self._prune_history_locked(now)
 
-                self._history.append(
-                    (now, False)
-                )
+                self._history.append((now, False))
 
                 self._consecutive_failures = 0
 
@@ -173,41 +153,23 @@ class CircuitBreaker:
 
             self._db_failure_count += 1
 
-            if (
-                self._state
-                == CircuitState.HALF_OPEN
-            ):
+            if self._state == CircuitState.HALF_OPEN:
                 self._probe_in_flight = False
                 callback = self._open_locked(now)
 
             elif self._state == CircuitState.CLOSED:
                 self._prune_history_locked(now)
 
-                self._history.append(
-                    (now, True)
-                )
+                self._history.append((now, True))
 
                 self._consecutive_failures += 1
 
-                failures = sum(
-                    1
-                    for _, failed in self._history
-                    if failed
-                )
+                failures = sum(1 for _, failed in self._history if failed)
 
-                too_many_recent_failures = (
-                    len(self._history) == 20
-                    and failures > 10
-                )
+                too_many_recent_failures = len(self._history) == 20 and failures > 10
 
-                if (
-                    self._consecutive_failures
-                    >= 5
-                    or too_many_recent_failures
-                ):
-                    callback = self._open_locked(
-                        now
-                    )
+                if self._consecutive_failures >= 5 or too_many_recent_failures:
+                    callback = self._open_locked(now)
 
         self._run_callback(callback)
 
@@ -226,9 +188,7 @@ class CircuitBreaker:
         self._probe_in_flight = False
         self._half_open_successes = 0
 
-        return self._transition_locked(
-            CircuitState.OPEN
-        )
+        return self._transition_locked(CircuitState.OPEN)
 
     def _transition_locked(
         self,
@@ -262,10 +222,7 @@ class CircuitBreaker:
         self,
         now: float,
     ) -> None:
-        while (
-            self._history
-            and now - self._history[0][0] > 30
-        ):
+        while self._history and now - self._history[0][0] > 30:
             self._history.popleft()
 
     @staticmethod
@@ -282,15 +239,13 @@ class CircuitBreaker:
         if callback is None:
             return
 
-        function, old_state, new_state = (
-            callback
-        )
+        function, old_state, new_state = callback
 
         try:
             function(
                 old_state,
                 new_state,
             )
-        except Exception: # noqa: BLE001
+        except Exception:  # noqa: BLE001
             # Alerting must never break DB access.
             return

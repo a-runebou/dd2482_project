@@ -24,9 +24,7 @@ class FakeClock:
 def test_five_failures_open_circuit() -> None:
     clock = FakeClock()
 
-    breaker = CircuitBreaker(
-        clock=clock
-    )
+    breaker = CircuitBreaker(clock=clock)
 
     for _ in range(5):
         breaker.record_failure()
@@ -47,9 +45,7 @@ def test_open_circuit_rejects_calls() -> None:
 def test_circuit_recovers_after_two_probes() -> None:
     clock = FakeClock()
 
-    breaker = CircuitBreaker(
-        clock=clock
-    )
+    breaker = CircuitBreaker(clock=clock)
 
     for _ in range(5):
         breaker.record_failure()
@@ -58,28 +54,20 @@ def test_circuit_recovers_after_two_probes() -> None:
 
     breaker.before_call()
 
-    assert (
-        breaker.state
-        == CircuitState.HALF_OPEN
-    )
+    assert breaker.state == CircuitState.HALF_OPEN
 
     breaker.record_success()
 
     breaker.before_call()
     breaker.record_success()
 
-    assert (
-        breaker.state
-        == CircuitState.CLOSED
-    )
+    assert breaker.state == CircuitState.CLOSED
 
 
 def test_half_open_failure_reopens_circuit() -> None:
     clock = FakeClock()
 
-    breaker = CircuitBreaker(
-        clock=clock
-    )
+    breaker = CircuitBreaker(clock=clock)
 
     for _ in range(5):
         breaker.record_failure()

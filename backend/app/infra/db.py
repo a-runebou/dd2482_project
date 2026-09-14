@@ -29,9 +29,7 @@ engine = create_engine(
     settings.database_url,
     pool_pre_ping=True,
     pool_timeout=2,
-    connect_args={
-        "options": "-c statement_timeout=3000"
-    },
+    connect_args={"options": "-c statement_timeout=3000"},
 )
 
 
@@ -43,11 +41,7 @@ SessionLocal = sessionmaker(
 )
 
 
-circuit_breaker = CircuitBreaker(
-    transition_callback=(
-        send_circuit_transition_alert
-    )
-)
+circuit_breaker = CircuitBreaker(transition_callback=(send_circuit_transition_alert))
 
 
 @contextmanager
@@ -88,9 +82,7 @@ def get_db() -> Generator[
 def database_ready() -> bool:
     try:
         with guarded_session() as db:
-            db.execute(
-                text("SELECT 1")
-            )
+            db.execute(text("SELECT 1"))
     except (
         CircuitOpenError,
         SQLAlchemyError,

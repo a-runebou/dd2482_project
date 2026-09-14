@@ -16,17 +16,8 @@ def send_circuit_transition_alert(
     new_state: CircuitState,
 ) -> None:
     if not (
-        (
-            old_state == CircuitState.CLOSED
-            and new_state
-            == CircuitState.OPEN
-        )
-        or (
-            old_state
-            == CircuitState.HALF_OPEN
-            and new_state
-            == CircuitState.CLOSED
-        )
+        (old_state == CircuitState.CLOSED and new_state == CircuitState.OPEN)
+        or (old_state == CircuitState.HALF_OPEN and new_state == CircuitState.CLOSED)
     ):
         return
 
@@ -42,8 +33,7 @@ def send_circuit_transition_alert(
     with _lock:
         if (
             _last_alert_at is not None
-            and now - _last_alert_at
-            < _ALERT_COOLDOWN_SECONDS
+            and now - _last_alert_at < _ALERT_COOLDOWN_SECONDS
         ):
             return
 
@@ -51,10 +41,7 @@ def send_circuit_transition_alert(
 
     send_email(
         to=settings.ops_alert_email,
-        subject=(
-            "Schedular database circuit "
-            f"{new_state.value}"
-        ),
+        subject=(f"Schedular database circuit {new_state.value}"),
         text=(
             "The PostgreSQL circuit breaker "
             f"changed from {old_state.value} "

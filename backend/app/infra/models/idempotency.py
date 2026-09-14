@@ -51,9 +51,7 @@ class IdempotencyRecord(Base):
         nullable=False,
     )
 
-    response_headers: Mapped[
-        dict[str, str]
-    ] = mapped_column(
+    response_headers: Mapped[dict[str, str]] = mapped_column(
         JSONB,
         nullable=False,
     )
