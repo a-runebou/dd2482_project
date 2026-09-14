@@ -59,9 +59,7 @@ def _group_and_membership(
     slug: str,
     user_id: UUID,
 ) -> tuple[Group, Membership]:
-    group = db.scalar(
-        select(Group).where(Group.slug == slug)
-    )
+    group = db.scalar(select(Group).where(Group.slug == slug))
 
     if group is None:
         raise GroupNotFound
@@ -99,15 +97,11 @@ def get_my_availability(
     ).all()
 
     available = sorted(
-        row.slot_start
-        for row in rows
-        if row.state == AvailabilityState.AVAILABLE
+        row.slot_start for row in rows if row.state == AvailabilityState.AVAILABLE
     )
 
     preferred = sorted(
-        row.slot_start
-        for row in rows
-        if row.state == AvailabilityState.PREFERRED
+        row.slot_start for row in rows if row.state == AvailabilityState.PREFERRED
     )
 
     return available, preferred
@@ -156,9 +150,7 @@ def put_my_availability(
 
     preferred_set = set(validated_preferred)
 
-    available_set = (
-        set(validated_available) - preferred_set
-    )
+    available_set = set(validated_available) - preferred_set
 
     db.execute(
         delete(Availability).where(
@@ -227,10 +219,7 @@ def get_availability_matrix(
         max_range_days=settings.max_range_days,
     )
 
-    slot_indices = {
-        slot: index
-        for index, slot in enumerate(slots)
-    }
+    slot_indices = {slot: index for index, slot in enumerate(slots)}
 
     member_rows = db.execute(
         select(Membership, User)
@@ -243,9 +232,7 @@ def get_availability_matrix(
     ).all()
 
     availability_rows = db.scalars(
-        select(Availability).where(
-            Availability.group_id == group.id
-        )
+        select(Availability).where(Availability.group_id == group.id)
     ).all()
 
     rows_by_user: dict[
@@ -270,10 +257,7 @@ def get_availability_matrix(
         available_indices: list[int] = []
         preferred_indices: list[int] = []
 
-        responded = (
-            membership.availability_submitted_at
-            is not None
-        )
+        responded = membership.availability_submitted_at is not None
 
         if responded:
             responded_count += 1
@@ -282,17 +266,12 @@ def get_availability_matrix(
             membership.user_id,
             [],
         ):
-            index = slot_indices.get(
-                row.slot_start
-            )
+            index = slot_indices.get(row.slot_start)
 
             if index is None:
                 continue
 
-            if (
-                row.state
-                == AvailabilityState.PREFERRED
-            ):
+            if row.state == AvailabilityState.PREFERRED:
                 preferred_indices.append(index)
                 preferred_counts[index] += 1
             else:
@@ -302,17 +281,10 @@ def get_availability_matrix(
         participants.append(
             ParticipantData(
                 user_id=member_user.id,
-                display_name=(
-                    member_user.display_name
-                    or "User"
-                ),
+                display_name=(member_user.display_name or "User"),
                 responded=responded,
-                available=sorted(
-                    available_indices
-                ),
-                preferred=sorted(
-                    preferred_indices
-                ),
+                available=sorted(available_indices),
+                preferred=sorted(preferred_indices),
             )
         )
 

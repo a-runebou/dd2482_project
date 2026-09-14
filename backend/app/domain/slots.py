@@ -25,14 +25,10 @@ def validate_group_window(
     try:
         ZoneInfo(timezone_name)
     except ZoneInfoNotFoundError as exc:
-        raise SlotValidationError(
-            "timezone must be a valid IANA timezone"
-        ) from exc
+        raise SlotValidationError("timezone must be a valid IANA timezone") from exc
 
     if date_end < date_start:
-        raise SlotValidationError(
-            "date_end must not be before date_start"
-        )
+        raise SlotValidationError("date_end must not be before date_start")
 
     range_days = (date_end - date_start).days + 1
 
@@ -43,9 +39,7 @@ def validate_group_window(
         )
 
     if slot_minutes <= 0:
-        raise SlotValidationError(
-            "slot_minutes must be positive"
-        )
+        raise SlotValidationError("slot_minutes must be positive")
 
     if (
         window_start_minute < 0
@@ -53,22 +47,15 @@ def validate_group_window(
         or window_end_minute < 30
         or window_end_minute > 1440
     ):
-        raise SlotValidationError(
-            "daily window is outside the valid range"
-        )
+        raise SlotValidationError("daily window is outside the valid range")
 
     if window_start_minute >= window_end_minute:
         raise SlotValidationError(
             "window_start_minute must be before window_end_minute"
         )
 
-    if (
-        window_start_minute % slot_minutes != 0
-        or window_end_minute % slot_minutes != 0
-    ):
-        raise SlotValidationError(
-            "daily window must align to slot_minutes"
-        )
+    if window_start_minute % slot_minutes != 0 or window_end_minute % slot_minutes != 0:
+        raise SlotValidationError("daily window must align to slot_minutes")
 
 
 def generate_slots(
@@ -121,9 +108,7 @@ def generate_slots(
 
             if (
                 local.date() == current_date
-                and window_start_minute
-                <= minute
-                < window_end_minute
+                and window_start_minute <= minute < window_end_minute
                 and minute % slot_minutes == 0
             ):
                 slots.append(current)

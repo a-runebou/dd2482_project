@@ -30,12 +30,8 @@ def get_suggestions(
         SuggestionParticipant(
             user_id=participant.user_id,
             responded=participant.responded,
-            available=set(
-                participant.available
-            ),
-            preferred=set(
-                participant.preferred
-            ),
+            available=set(participant.available),
+            preferred=set(participant.preferred),
         )
         for participant in matrix.participants
     ]

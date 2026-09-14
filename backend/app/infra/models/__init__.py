@@ -5,6 +5,9 @@ from app.infra.models.calendar import (
     CalendarSourceStatus,
 )
 from app.infra.models.group import Group, GroupState, Membership, MembershipRole
+from app.infra.models.idempotency import (
+    IdempotencyRecord,
+)
 from app.infra.models.job import Job
 from app.infra.models.scheduling import (
     Availability,
@@ -25,6 +28,7 @@ __all__ = [
     "CalendarSourceStatus",
     "Group",
     "GroupState",
+    "IdempotencyRecord",
     "Job",
     "MagicLink",
     "Membership",

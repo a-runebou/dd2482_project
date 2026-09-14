@@ -81,9 +81,7 @@ def test_create_group(monkeypatch) -> None:
     user = make_user()
     view = make_view(user)
 
-    app.dependency_overrides[get_current_user] = (
-        lambda: user
-    )
+    app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_db] = override_db
 
     monkeypatch.setattr(
@@ -116,9 +114,7 @@ def test_list_groups(monkeypatch) -> None:
     user = make_user()
     view = make_view(user)
 
-    app.dependency_overrides[get_current_user] = (
-        lambda: user
-    )
+    app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_db] = override_db
 
     monkeypatch.setattr(
@@ -139,9 +135,7 @@ def test_get_group(monkeypatch) -> None:
     user = make_user()
     view = make_view(user)
 
-    app.dependency_overrides[get_current_user] = (
-        lambda: user
-    )
+    app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_db] = override_db
 
     monkeypatch.setattr(
@@ -149,9 +143,7 @@ def test_get_group(monkeypatch) -> None:
         lambda *args, **kwargs: view,
     )
 
-    response = client.get(
-        "/api/v1/groups/7fQ2mXk9Lp3R"
-    )
+    response = client.get("/api/v1/groups/7fQ2mXk9Lp3R")
 
     assert response.status_code == 200
     assert response.headers["etag"] == '"1"'
@@ -166,9 +158,7 @@ def test_patch_group(monkeypatch) -> None:
     view.group.name = "Updated"
     view.group.version = 2
 
-    app.dependency_overrides[get_current_user] = (
-        lambda: user
-    )
+    app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_db] = override_db
 
     monkeypatch.setattr(
@@ -191,9 +181,7 @@ def test_patch_group(monkeypatch) -> None:
 def test_delete_group(monkeypatch) -> None:
     user = make_user()
 
-    app.dependency_overrides[get_current_user] = (
-        lambda: user
-    )
+    app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_db] = override_db
 
     monkeypatch.setattr(
@@ -201,9 +189,7 @@ def test_delete_group(monkeypatch) -> None:
         lambda *args, **kwargs: None,
     )
 
-    response = client.delete(
-        "/api/v1/groups/7fQ2mXk9Lp3R"
-    )
+    response = client.delete("/api/v1/groups/7fQ2mXk9Lp3R")
 
     assert response.status_code == 204
 
@@ -256,14 +242,11 @@ def test_group_endpoints_require_auth(
     assert response.status_code == 401
 
 
-
 def test_join_group(monkeypatch) -> None:
     user = make_user()
     view = make_view(user)
 
-    app.dependency_overrides[get_current_user] = (
-        lambda: user
-    )
+    app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_db] = override_db
 
     monkeypatch.setattr(
@@ -273,10 +256,7 @@ def test_join_group(monkeypatch) -> None:
 
     response = client.post(
         "/api/v1/groups/7fQ2mXk9Lp3R/join",
-        json={
-            "invite_token":
-                "1234567890abcdef"
-        },
+        json={"invite_token": "1234567890abcdef"},
     )
 
     assert response.status_code == 200
@@ -305,9 +285,7 @@ def test_list_members(monkeypatch) -> None:
         responded=False,
     )
 
-    app.dependency_overrides[get_current_user] = (
-        lambda: user
-    )
+    app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_db] = override_db
 
     monkeypatch.setattr(
@@ -315,9 +293,7 @@ def test_list_members(monkeypatch) -> None:
         lambda *args, **kwargs: [member],
     )
 
-    response = client.get(
-        "/api/v1/groups/7fQ2mXk9Lp3R/members"
-    )
+    response = client.get("/api/v1/groups/7fQ2mXk9Lp3R/members")
 
     assert response.status_code == 200
     assert len(response.json()["data"]) == 1
@@ -328,9 +304,7 @@ def test_list_members(monkeypatch) -> None:
 def test_remove_member(monkeypatch) -> None:
     user = make_user()
 
-    app.dependency_overrides[get_current_user] = (
-        lambda: user
-    )
+    app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_db] = override_db
 
     monkeypatch.setattr(
@@ -338,23 +312,17 @@ def test_remove_member(monkeypatch) -> None:
         lambda *args, **kwargs: None,
     )
 
-    response = client.delete(
-        f"/api/v1/groups/7fQ2mXk9Lp3R"
-        f"/members/{uuid4()}"
-    )
+    response = client.delete(f"/api/v1/groups/7fQ2mXk9Lp3R/members/{uuid4()}")
 
     assert response.status_code == 204
 
     app.dependency_overrides.clear()
 
 
-
 def test_get_my_availability(monkeypatch) -> None:
     user = make_user()
 
-    app.dependency_overrides[get_current_user] = (
-        lambda: user
-    )
+    app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_db] = override_db
 
     slot = datetime(
@@ -371,10 +339,7 @@ def test_get_my_availability(monkeypatch) -> None:
         lambda *args, **kwargs: ([slot], []),
     )
 
-    response = client.get(
-        "/api/v1/groups/"
-        "7fQ2mXk9Lp3R/availability/me"
-    )
+    response = client.get("/api/v1/groups/7fQ2mXk9Lp3R/availability/me")
 
     assert response.status_code == 200
     assert len(response.json()["available"]) == 1
@@ -385,9 +350,7 @@ def test_get_my_availability(monkeypatch) -> None:
 def test_put_my_availability(monkeypatch) -> None:
     user = make_user()
 
-    app.dependency_overrides[get_current_user] = (
-        lambda: user
-    )
+    app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_db] = override_db
 
     slot = datetime(
@@ -409,12 +372,9 @@ def test_put_my_availability(monkeypatch) -> None:
     )
 
     response = client.put(
-        "/api/v1/groups/"
-        "7fQ2mXk9Lp3R/availability/me",
+        "/api/v1/groups/7fQ2mXk9Lp3R/availability/me",
         json={
-            "available": [
-                "2026-10-01T08:00:00Z"
-            ],
+            "available": ["2026-10-01T08:00:00Z"],
             "preferred": [],
         },
     )
@@ -430,9 +390,7 @@ def test_get_availability_matrix(
 ) -> None:
     user = make_user()
 
-    app.dependency_overrides[get_current_user] = (
-        lambda: user
-    )
+    app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_db] = override_db
 
     slot = datetime(
@@ -472,10 +430,7 @@ def test_get_availability_matrix(
         lambda *args, **kwargs: matrix,
     )
 
-    response = client.get(
-        "/api/v1/groups/"
-        "7fQ2mXk9Lp3R/availability"
-    )
+    response = client.get("/api/v1/groups/7fQ2mXk9Lp3R/availability")
 
     assert response.status_code == 200
     assert response.json()["member_count"] == 1
@@ -487,12 +442,8 @@ def test_get_availability_matrix(
 def test_get_suggestions(monkeypatch) -> None:
     user = make_user()
 
-    app.dependency_overrides[
-        get_current_user
-    ] = lambda: user
-    app.dependency_overrides[
-        get_db
-    ] = override_db
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_db] = override_db
 
     start = datetime(
         2026,
@@ -526,25 +477,17 @@ def test_get_suggestions(monkeypatch) -> None:
         lambda *args, **kwargs: [result],
     )
 
-    response = client.get(
-        "/api/v1/groups/"
-        "7fQ2mXk9Lp3R/suggestions"
-    )
+    response = client.get("/api/v1/groups/7fQ2mXk9Lp3R/suggestions")
 
     assert response.status_code == 200
     assert len(response.json()["data"]) == 1
-    assert response.json()["data"][0][
-        "score"
-    ] == 4.0
+    assert response.json()["data"][0]["score"] == 4.0
 
     app.dependency_overrides.clear()
 
 
 def test_suggestions_require_auth() -> None:
-    response = client.get(
-        "/api/v1/groups/"
-        "7fQ2mXk9Lp3R/suggestions"
-    )
+    response = client.get("/api/v1/groups/7fQ2mXk9Lp3R/suggestions")
 
     assert response.status_code == 401
 
@@ -573,9 +516,7 @@ def make_proposal_view(
         ),
         origin=ProposalOrigin.MANUAL,
         created_by=user.id,
-        created_at=datetime.now(
-            UTC
-        ),
+        created_at=datetime.now(UTC),
     )
 
     return ProposalView(
@@ -585,6 +526,7 @@ def make_proposal_view(
         no=[],
         my_vote=None,
     )
+
 
 def test_put_vote(monkeypatch) -> None:
     user = make_user()
@@ -598,12 +540,8 @@ def test_put_vote(monkeypatch) -> None:
         my_vote=VoteValue.YES,
     )
 
-    app.dependency_overrides[
-        get_current_user
-    ] = lambda: user
-    app.dependency_overrides[
-        get_db
-    ] = override_db
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_db] = override_db
 
     monkeypatch.setattr(
         "app.api.groups.put_vote",
@@ -611,17 +549,13 @@ def test_put_vote(monkeypatch) -> None:
     )
 
     response = client.put(
-        "/api/v1/groups/"
-        f"7fQ2mXk9Lp3R/proposals/"
-        f"{proposal.proposal.id}/vote/me",
+        f"/api/v1/groups/7fQ2mXk9Lp3R/proposals/{proposal.proposal.id}/vote/me",
         json={"value": "yes"},
     )
 
     assert response.status_code == 200
     assert response.json()["my_vote"] == "yes"
-    assert user.id.hex in (
-        response.text.replace("-", "")
-    )
+    assert user.id.hex in (response.text.replace("-", ""))
 
     app.dependency_overrides.clear()
 
@@ -630,12 +564,8 @@ def test_delete_vote(monkeypatch) -> None:
     user = make_user()
     proposal_id = uuid4()
 
-    app.dependency_overrides[
-        get_current_user
-    ] = lambda: user
-    app.dependency_overrides[
-        get_db
-    ] = override_db
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_db] = override_db
 
     monkeypatch.setattr(
         "app.api.groups.delete_vote",
@@ -643,9 +573,7 @@ def test_delete_vote(monkeypatch) -> None:
     )
 
     response = client.delete(
-        "/api/v1/groups/"
-        f"7fQ2mXk9Lp3R/proposals/"
-        f"{proposal_id}/vote/me"
+        f"/api/v1/groups/7fQ2mXk9Lp3R/proposals/{proposal_id}/vote/me"
     )
 
     assert response.status_code == 204
@@ -661,12 +589,8 @@ def test_confirm_group(monkeypatch) -> None:
     view.group.confirmed_proposal_id = uuid4()
     view.group.version = 2
 
-    app.dependency_overrides[
-        get_current_user
-    ] = lambda: user
-    app.dependency_overrides[
-        get_db
-    ] = override_db
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_db] = override_db
 
     monkeypatch.setattr(
         "app.api.groups.confirm_group",
@@ -674,20 +598,15 @@ def test_confirm_group(monkeypatch) -> None:
     )
 
     response = client.post(
-        "/api/v1/groups/"
-        "7fQ2mXk9Lp3R/confirmation",
+        "/api/v1/groups/7fQ2mXk9Lp3R/confirmation",
         json={
-            "proposal_id": str(
-                view.group.confirmed_proposal_id
-            ),
+            "proposal_id": str(view.group.confirmed_proposal_id),
             "send_reminders": True,
         },
     )
 
     assert response.status_code == 200
-    assert response.json()["state"] == (
-        "confirmed"
-    )
+    assert response.json()["state"] == ("confirmed")
     assert response.json()["version"] == 2
 
     app.dependency_overrides.clear()
@@ -701,22 +620,15 @@ def test_unconfirm_group(monkeypatch) -> None:
     view.group.confirmed_proposal_id = None
     view.group.version = 3
 
-    app.dependency_overrides[
-        get_current_user
-    ] = lambda: user
-    app.dependency_overrides[
-        get_db
-    ] = override_db
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_db] = override_db
 
     monkeypatch.setattr(
         "app.api.groups.unconfirm_group",
         lambda *args, **kwargs: view,
     )
 
-    response = client.delete(
-        "/api/v1/groups/"
-        "7fQ2mXk9Lp3R/confirmation"
-    )
+    response = client.delete("/api/v1/groups/7fQ2mXk9Lp3R/confirmation")
 
     assert response.status_code == 200
     assert response.json()["state"] == "open"

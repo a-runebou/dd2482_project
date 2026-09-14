@@ -26,9 +26,6 @@ def test_magic_link_email(
 
     call = mock_send.call_args.kwargs
 
-    assert (
-        call["to"]
-        == "alex@example.com"
-    )
+    assert call["to"] == "alex@example.com"
 
     assert "abc123" in call["text"]

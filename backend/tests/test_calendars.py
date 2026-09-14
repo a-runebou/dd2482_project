@@ -36,15 +36,11 @@ def make_source() -> CalendarSource:
         url=None,
         label="schedule.ics",
         status=CalendarSourceStatus.OK,
-        last_polled_at=datetime.now(
-            UTC
-        ),
+        last_polled_at=datetime.now(UTC),
         last_error_code=None,
         etag=None,
         event_count=1,
-        created_at=datetime.now(
-            UTC
-        ),
+        created_at=datetime.now(UTC),
     )
 
 
@@ -56,13 +52,9 @@ def test_upload_calendar(monkeypatch) -> None:
     user = make_user()
     source = make_source()
 
-    app.dependency_overrides[
-        get_current_user
-    ] = lambda: user
+    app.dependency_overrides[get_current_user] = lambda: user
 
-    app.dependency_overrides[
-        get_db
-    ] = override_db
+    app.dependency_overrides[get_db] = override_db
 
     monkeypatch.setattr(
         "app.api.me.upload_calendar",
@@ -74,10 +66,7 @@ def test_upload_calendar(monkeypatch) -> None:
         files={
             "file": (
                 "schedule.ics",
-                (
-                    b"BEGIN:VCALENDAR\r\n"
-                    b"END:VCALENDAR\r\n"
-                ),
+                (b"BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n"),
                 "text/calendar",
             )
         },
@@ -95,10 +84,7 @@ def test_upload_requires_auth() -> None:
         files={
             "file": (
                 "schedule.ics",
-                (
-                    b"BEGIN:VCALENDAR\r\n"
-                    b"END:VCALENDAR\r\n"
-                ),
+                (b"BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n"),
                 "text/calendar",
             )
         },
@@ -117,12 +103,8 @@ def test_create_calendar_subscription(
     source.url = "https://example.com/schedule.ics"
     source.status = CalendarSourceStatus.PENDING
 
-    app.dependency_overrides[
-        get_current_user
-    ] = lambda: user
-    app.dependency_overrides[
-        get_db
-    ] = override_db
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_db] = override_db
 
     monkeypatch.setattr(
         "app.api.me.create_calendar_source",
@@ -132,8 +114,7 @@ def test_create_calendar_subscription(
     response = client.post(
         "/api/v1/me/calendar-sources",
         json={
-            "url":
-                "https://example.com/schedule.ics",
+            "url": "https://example.com/schedule.ics",
             "label": "KTH",
         },
     )
@@ -151,21 +132,15 @@ def test_list_calendar_sources(
     user = make_user()
     source = make_source()
 
-    app.dependency_overrides[
-        get_current_user
-    ] = lambda: user
-    app.dependency_overrides[
-        get_db
-    ] = override_db
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_db] = override_db
 
     monkeypatch.setattr(
         "app.api.me.list_calendar_sources",
         lambda *args, **kwargs: [source],
     )
 
-    response = client.get(
-        "/api/v1/me/calendar-sources"
-    )
+    response = client.get("/api/v1/me/calendar-sources")
 
     assert response.status_code == 200
     assert len(response.json()["data"]) == 1

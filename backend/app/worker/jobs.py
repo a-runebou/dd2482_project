@@ -22,9 +22,7 @@ def claim_job(
             Job.run_after,
             Job.id,
         )
-        .with_for_update(
-            skip_locked=True
-        )
+        .with_for_update(skip_locked=True)
         .limit(1)
     )
 
@@ -45,9 +43,7 @@ def complete_job(
     db: Session,
     job: Job,
 ) -> None:
-    job.completed_at = datetime.now(
-        UTC
-    )
+    job.completed_at = datetime.now(UTC)
     job.locked_at = None
     job.last_error = None
 
@@ -64,9 +60,7 @@ def retry_job(
         3600,
     )
 
-    job.run_after = datetime.now(
-        UTC
-    ) + timedelta(seconds=delay_seconds)
+    job.run_after = datetime.now(UTC) + timedelta(seconds=delay_seconds)
 
     job.locked_at = None
     job.last_error = str(error)[:2000]

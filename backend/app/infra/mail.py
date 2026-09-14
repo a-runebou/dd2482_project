@@ -25,10 +25,7 @@ def send_email(
         settings.smtp_port,
         timeout=10,
     ) as smtp:
-        if (
-            settings.smtp_username
-            and settings.smtp_password
-        ):
+        if settings.smtp_username and settings.smtp_password:
             smtp.login(
                 settings.smtp_username,
                 settings.smtp_password,

@@ -80,12 +80,7 @@ def confirm_group(
             )
         ).all()
 
-        run_after = (
-            proposal.start_at
-            - timedelta(
-                hours=settings.reminder_lead_hours
-            )
-        )
+        run_after = proposal.start_at - timedelta(hours=settings.reminder_lead_hours)
 
         if run_after > now:
             for membership in memberships:
@@ -95,20 +90,13 @@ def confirm_group(
                         kind="reminder_send",
                         payload={
                             "group_id": str(group.id),
-                            "user_id": str(
-                                membership.user_id
-                            ),
-                            "proposal_id": str(
-                                proposal.id
-                            ),
+                            "user_id": str(membership.user_id),
+                            "proposal_id": str(proposal.id),
                         },
                         run_after=run_after,
                         attempts=0,
                         dedupe_key=(
-                            f"reminder:"
-                            f"{group.id}:"
-                            f"{membership.user_id}:"
-                            f"{proposal.id}"
+                            f"reminder:{group.id}:{membership.user_id}:{proposal.id}"
                         ),
                         locked_at=None,
                         completed_at=None,
@@ -143,17 +131,12 @@ def unconfirm_group(
 
     group = view.group
 
-    if (
-        group.state != GroupState.CONFIRMED
-        or group.confirmed_proposal_id is None
-    ):
+    if group.state != GroupState.CONFIRMED or group.confirmed_proposal_id is None:
         raise NotConfirmed
 
     proposal_id = group.confirmed_proposal_id
 
-    prefix = (
-        f"reminder:{group.id}:%:{proposal_id}"
-    )
+    prefix = f"reminder:{group.id}:%:{proposal_id}"
 
     db.execute(
         delete(Job).where(
@@ -165,9 +148,7 @@ def unconfirm_group(
     group.state = GroupState.OPEN
     group.confirmed_proposal_id = None
     group.version += 1
-    group.updated_at = datetime.now(
-        UTC
-    )
+    group.updated_at = datetime.now(UTC)
 
     db.commit()
     db.refresh(group)

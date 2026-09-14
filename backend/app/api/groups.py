@@ -146,11 +146,7 @@ def raise_group_error(exc: Exception) -> None:
         ) from exc
 
     if isinstance(exc, SlotValidationError):
-        status_code = (
-            422
-            if exc.code == "range_too_long"
-            else 400
-        )
+        status_code = 422 if exc.code == "range_too_long" else 400
 
         raise ProblemException(
             status_code=status_code,
@@ -184,10 +180,7 @@ def get_groups(
         raise
 
     return GroupPageResponse(
-        data=[
-            group_response(view)
-            for view in views
-        ],
+        data=[group_response(view) for view in views],
         next_cursor=next_cursor,
     )
 
@@ -211,9 +204,7 @@ def post_group(
             timezone_name=body.timezone,
             date_start=body.date_start,
             date_end=body.date_end,
-            window_start_minute=(
-                body.window_start_minute
-            ),
+            window_start_minute=(body.window_start_minute),
             window_end_minute=body.window_end_minute,
         )
     except Exception as exc:
@@ -290,18 +281,14 @@ def patch_group(
             db,
             slug=slug,
             user_id=user.id,
-            changes=body.model_dump(
-                exclude_unset=True
-            ),
+            changes=body.model_dump(exclude_unset=True),
             if_match=if_match,
         )
     except Exception as exc:
         raise_group_error(exc)
         raise
 
-    response.headers["ETag"] = etag_for(
-        view.group.version
-    )
+    response.headers["ETag"] = etag_for(view.group.version)
 
     return group_response(view)
 
@@ -325,9 +312,7 @@ def remove_group(
         raise_group_error(exc)
         raise
 
-    return Response(
-        status_code=status.HTTP_204_NO_CONTENT
-    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(
@@ -392,15 +377,10 @@ def get_members(
         data=[
             MemberResponse(
                 user_id=member.user.id,
-                display_name=(
-                    member.user.display_name
-                    or "User"
-                ),
+                display_name=(member.user.display_name or "User"),
                 role=member.membership.role.value,
                 responded=member.responded,
-                notify_email=(
-                    member.membership.notify_email
-                ),
+                notify_email=(member.membership.notify_email),
                 joined_at=member.membership.joined_at,
             )
             for member in members
@@ -439,9 +419,7 @@ def delete_member(
             title="Forbidden",
         ) from exc
 
-    return Response(
-        status_code=status.HTTP_204_NO_CONTENT
-    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get(
@@ -486,9 +464,7 @@ def get_group_availability(
         participants=[
             ParticipantAvailability(
                 user_id=participant.user_id,
-                display_name=(
-                    participant.display_name
-                ),
+                display_name=(participant.display_name),
                 responded=participant.responded,
                 available=participant.available,
                 preferred=participant.preferred,
@@ -498,12 +474,8 @@ def get_group_availability(
         aggregate=[
             SlotAggregate(
                 slot_index=item.slot_index,
-                available_count=(
-                    item.available_count
-                ),
-                preferred_count=(
-                    item.preferred_count
-                ),
+                available_count=(item.available_count),
+                preferred_count=(item.preferred_count),
             )
             for item in matrix.aggregate
         ],
@@ -552,14 +524,12 @@ def put_own_availability(
     db: Session = Depends(get_db),
 ) -> AvailabilitySelection:
     try:
-        available, preferred, version = (
-            put_my_availability(
-                db,
-                slug=slug,
-                user_id=user.id,
-                available=body.available,
-                preferred=body.preferred,
-            )
+        available, preferred, version = put_my_availability(
+            db,
+            slug=slug,
+            user_id=user.id,
+            available=body.available,
+            preferred=body.preferred,
         )
     except GroupNotFound as exc:
         raise ProblemException(
@@ -587,7 +557,6 @@ def put_own_availability(
         available=available,
         preferred=preferred,
     )
-
 
 
 @router.get(
@@ -631,23 +600,14 @@ def get_group_suggestions(
                 start_at=item.start_at,
                 end_at=item.end_at,
                 score=item.score,
-                available_user_ids=(
-                    item.available_user_ids
-                ),
-                preferred_user_ids=(
-                    item.preferred_user_ids
-                ),
-                missing_user_ids=(
-                    item.missing_user_ids
-                ),
+                available_user_ids=(item.available_user_ids),
+                preferred_user_ids=(item.preferred_user_ids),
+                missing_user_ids=(item.missing_user_ids),
             )
             for item in suggestions
         ],
         next_cursor=None,
     )
-
-
-
 
 
 def proposal_response(
@@ -666,14 +626,9 @@ def proposal_response(
             maybe=view.maybe,
             no=view.no,
         ),
-        my_vote=(
-            view.my_vote.value
-            if view.my_vote is not None
-            else None
-        ),
+        my_vote=(view.my_vote.value if view.my_vote is not None else None),
         created_at=proposal.created_at,
     )
-
 
 
 @router.put(
@@ -747,10 +702,7 @@ def delete_my_vote(
             title="Group confirmed",
         ) from exc
 
-    return Response(
-        status_code=status.HTTP_204_NO_CONTENT
-    )
-
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(
@@ -769,9 +721,7 @@ def post_confirmation(
             slug=slug,
             user_id=user.id,
             proposal_id=body.proposal_id,
-            send_reminders=(
-                body.send_reminders
-            ),
+            send_reminders=(body.send_reminders),
         )
     except NotOwner as exc:
         raise ProblemException(

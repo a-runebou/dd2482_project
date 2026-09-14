@@ -15,7 +15,9 @@ def _get_bool(name: str, default: bool) -> bool:
 class Settings:
     environment: str
     database_url: str
-    
+
+    ops_alert_email: str | None
+
     smtp_host: str
     smtp_port: int
     smtp_username: str | None
@@ -47,8 +49,6 @@ class Settings:
     refresh_token_ttl_days: int = 30
     magic_link_ttl_seconds: int = 900
 
-    
-
 
 def get_settings() -> Settings:
     return Settings(
@@ -74,17 +74,14 @@ def get_settings() -> Settings:
             "SMTP_HOST",
             "mailpit",
         ),
-        smtp_port=int(
-            os.getenv("SMTP_PORT", "1025")
-        ),
-        smtp_username=os.getenv(
-            "SMTP_USERNAME"
-        ),
-        smtp_password=os.getenv(
-            "SMTP_PASSWORD"
-        ),
+        smtp_port=int(os.getenv("SMTP_PORT", "1025")),
+        smtp_username=os.getenv("SMTP_USERNAME"),
+        smtp_password=os.getenv("SMTP_PASSWORD"),
         smtp_from=os.getenv(
             "SMTP_FROM",
             "schedular@example.local",
+        ),
+        ops_alert_email=os.getenv(
+            "OPS_ALERT_EMAIL",
         ),
     )
