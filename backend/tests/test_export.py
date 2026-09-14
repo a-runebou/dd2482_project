@@ -149,3 +149,41 @@ def test_event_ics_requires_auth() -> None:
     )
 
     assert response.status_code == 401
+
+
+def test_calendar_feed_does_not_require_bearer(
+    monkeypatch,
+) -> None:
+    user = make_user()
+    event = make_confirmed_event(user)
+
+    app.dependency_overrides[
+        get_db
+    ] = override_db
+
+    monkeypatch.setattr(
+        "app.api.export.get_feed_event",
+        lambda *args, **kwargs: event,
+    )
+
+    response = client.get(
+        "/api/v1/groups/"
+        "7fQ2mXk9Lp3R/feed.ics",
+        params={
+            "token": "x" * 32,
+        },
+    )
+
+    assert response.status_code == 200
+    assert "BEGIN:VCALENDAR" in response.text
+
+    app.dependency_overrides.clear()
+
+
+def test_calendar_feed_requires_token() -> None:
+    response = client.get(
+        "/api/v1/groups/"
+        "7fQ2mXk9Lp3R/feed.ics"
+    )
+
+    assert response.status_code == 400

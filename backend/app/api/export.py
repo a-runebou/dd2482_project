@@ -1,6 +1,7 @@
 from fastapi import (
     APIRouter,
     Depends,
+    Query,
     Response,
 )
 from sqlalchemy.orm import Session
@@ -11,8 +12,10 @@ from app.domain.ics import render_event_ics
 from app.infra.db import get_db
 from app.infra.models.user import User
 from app.services.export import (
+    FeedNotFound,
     GroupNotConfirmed,
     get_confirmed_event,
+    get_feed_event,
 )
 from app.services.groups import GroupNotFound
 
@@ -64,4 +67,41 @@ def get_event_ics(
                 'attachment; filename="event.ics"'
             )
         },
+    )
+
+
+@router.get("/{slug}/feed.ics")
+def get_group_feed(
+    slug: str,
+    token: str = Query(
+        min_length=32,
+        max_length=64,
+    ),
+    db: Session = Depends(get_db),
+) -> Response:
+    try:
+        event = get_feed_event(
+            db,
+            slug=slug,
+            token=token,
+        )
+    except FeedNotFound as exc:
+        raise ProblemException(
+            status_code=404,
+            code="not_found",
+            title="Calendar feed not found",
+        ) from exc
+
+    content = render_event_ics(
+        proposal_id=event.proposal.id,
+        summary=event.group.name,
+        description=event.group.description,
+        start_at=event.proposal.start_at,
+        end_at=event.proposal.end_at,
+        created_at=event.proposal.created_at,
+    )
+
+    return Response(
+        content=content,
+        media_type="text/calendar",
     )
