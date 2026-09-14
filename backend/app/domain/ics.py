@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
+from uuid import UUID
 
 from dateutil.rrule import rrulestr
-from icalendar import Calendar
+from icalendar import Calendar, Event
 
 
 class IcsParseError(ValueError):
@@ -134,3 +135,51 @@ def parse_ics(
     )
 
     return result
+
+
+def render_event_ics(
+    *,
+    proposal_id: UUID,
+    summary: str,
+    description: str | None,
+    start_at: datetime,
+    end_at: datetime,
+    created_at: datetime,
+) -> bytes:
+    calendar = Calendar()
+
+    calendar.add(
+        "prodid",
+        "-//Schedular//Schedular Calendar//EN",
+    )
+    calendar.add("version", "2.0")
+
+    event = Event()
+
+    event.add(
+        "uid",
+        f"{proposal_id}@schedular",
+    )
+    event.add(
+        "dtstamp",
+        created_at.astimezone(UTC),
+    )
+    event.add(
+        "dtstart",
+        start_at.astimezone(UTC),
+    )
+    event.add(
+        "dtend",
+        end_at.astimezone(UTC),
+    )
+    event.add("summary", summary)
+
+    if description is not None:
+        event.add(
+            "description",
+            description,
+        )
+
+    calendar.add_component(event)
+
+    return calendar.to_ical()

@@ -314,3 +314,21 @@ class CalendarSourceCreate(BaseModel):
         default=None,
         max_length=64,
     )
+
+
+class AnalyticsEvent(BaseModel):
+    name: str = Field(
+        max_length=64,
+    )
+    occurred_at: datetime
+    properties: dict[str, object] | None = None
+
+
+class AnalyticsBatch(BaseModel):
+    events: list[AnalyticsEvent] = Field(
+        max_length=50,
+    )
+
+
+class FlagAssignments(BaseModel):
+    flags: dict[str, str]

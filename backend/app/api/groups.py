@@ -1,9 +1,11 @@
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import (
     APIRouter,
     Depends,
     Header,
+    Path,
     Query,
     Response,
     status,
@@ -25,6 +27,8 @@ from app.api.schemas import (
     MemberPageResponse,
     MemberResponse,
     ParticipantAvailability,
+    ProposalCreate,
+    ProposalPageResponse,
     ProposalResponse,
     ProposalVotes,
     SlotAggregate,
@@ -36,6 +40,7 @@ from app.config import get_settings
 from app.domain.slots import SlotValidationError
 from app.infra.db import get_db
 from app.infra.models.scheduling import (
+    ProposalOrigin,
     VoteValue,
 )
 from app.infra.models.user import User
@@ -78,7 +83,10 @@ from app.services.proposals import (
     ProposalLimitReached,
     ProposalNotFound,
     ProposalView,
+    create_proposal,
+    delete_proposal,
     delete_vote,
+    list_proposals,
     put_vote,
 )
 from app.services.suggestions import (
@@ -390,12 +398,12 @@ def get_members(
 
 
 @router.delete(
-    "/{slug}/members/{user_id}",
+    "/{slug}/members/{userId}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 def delete_member(
     slug: str,
-    user_id: UUID,
+    user_id: Annotated[UUID, Path(alias="userId")],
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Response:
@@ -631,13 +639,149 @@ def proposal_response(
     )
 
 
+@router.get(
+    "/{slug}/proposals",
+    response_model=ProposalPageResponse,
+)
+def get_proposals(
+    slug: str,
+    response: Response,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ProposalPageResponse:
+    try:
+        proposals, version = list_proposals(
+            db,
+            slug=slug,
+            user_id=user.id,
+        )
+    except GroupNotFound as exc:
+        raise ProblemException(
+            status_code=404,
+            code="group_not_found",
+            title="Group not found",
+        ) from exc
+
+    response.headers["ETag"] = etag_for(version)
+
+    return ProposalPageResponse(
+        data=[proposal_response(proposal) for proposal in proposals],
+        next_cursor=None,
+    )
+
+
+@router.post(
+    "/{slug}/proposals",
+    response_model=ProposalResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def post_proposal(
+    slug: str,
+    body: ProposalCreate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ProposalResponse:
+    try:
+        proposal = create_proposal(
+            db,
+            slug=slug,
+            user_id=user.id,
+            start_at=body.start_at,
+            end_at=body.end_at,
+            origin=ProposalOrigin(body.origin),
+        )
+    except GroupNotFound as exc:
+        raise ProblemException(
+            status_code=404,
+            code="group_not_found",
+            title="Group not found",
+        ) from exc
+    except NotOwner as exc:
+        raise ProblemException(
+            status_code=403,
+            code="not_owner",
+            title="Owner access required",
+        ) from exc
+    except ProposalGroupConfirmed as exc:
+        raise ProblemException(
+            status_code=409,
+            code="group_confirmed",
+            title="Group confirmed",
+        ) from exc
+    except ProposalLimitReached as exc:
+        raise ProblemException(
+            status_code=409,
+            code="proposal_limit_reached",
+            title="Proposal limit reached",
+        ) from exc
+    except SlotValidationError as exc:
+        raise ProblemException(
+            status_code=422,
+            code=exc.code,
+            title="Validation failed",
+            detail=str(exc),
+        ) from exc
+
+    return proposal_response(proposal)
+
+
+@router.delete(
+    "/{slug}/proposals/{proposalId}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def remove_proposal(
+    slug: str,
+    proposal_id: Annotated[
+        UUID,
+        Path(alias="proposalId"),
+    ],
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    try:
+        delete_proposal(
+            db,
+            slug=slug,
+            user_id=user.id,
+            proposal_id=proposal_id,
+        )
+    except GroupNotFound as exc:
+        raise ProblemException(
+            status_code=404,
+            code="group_not_found",
+            title="Group not found",
+        ) from exc
+    except ProposalNotFound as exc:
+        raise ProblemException(
+            status_code=404,
+            code="proposal_not_found",
+            title="Proposal not found",
+        ) from exc
+    except NotOwner as exc:
+        raise ProblemException(
+            status_code=403,
+            code="not_owner",
+            title="Owner access required",
+        ) from exc
+    except ProposalGroupConfirmed as exc:
+        raise ProblemException(
+            status_code=409,
+            code="group_confirmed",
+            title="Group confirmed",
+        ) from exc
+
+    return Response(
+        status_code=status.HTTP_204_NO_CONTENT,
+    )
+
+
 @router.put(
-    "/{slug}/proposals/{proposal_id}/vote/me",
+    "/{slug}/proposals/{proposalId}/vote/me",
     response_model=ProposalResponse,
 )
 def put_my_vote(
     slug: str,
-    proposal_id: UUID,
+    proposal_id: Annotated[UUID, Path(alias="proposalId")],
     body: VoteInput,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -670,12 +814,12 @@ def put_my_vote(
 
 
 @router.delete(
-    "/{slug}/proposals/{proposal_id}/vote/me",
+    "/{slug}/proposals/{proposalId}/vote/me",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 def delete_my_vote(
     slug: str,
-    proposal_id: UUID,
+    proposal_id: Annotated[UUID, Path(alias="proposalId")],
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Response:

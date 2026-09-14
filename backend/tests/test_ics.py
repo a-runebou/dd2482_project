@@ -1,10 +1,12 @@
 from datetime import UTC, datetime
+from uuid import uuid4
 
 import pytest
 
 from app.domain.ics import (
     IcsParseError,
     parse_ics,
+    render_event_ics,
 )
 
 HORIZON_START = datetime(
@@ -85,3 +87,43 @@ def test_reject_oversized_calendar() -> None:
             horizon_start=HORIZON_START,
             horizon_end=HORIZON_END,
         )
+
+
+def test_render_event_ics() -> None:
+    content = render_event_ics(
+        proposal_id=uuid4(),
+        summary="Project meeting",
+        description="Discuss project",
+        start_at=datetime(
+            2026,
+            10,
+            5,
+            8,
+            0,
+            tzinfo=UTC,
+        ),
+        end_at=datetime(
+            2026,
+            10,
+            5,
+            9,
+            0,
+            tzinfo=UTC,
+        ),
+        created_at=datetime(
+            2026,
+            10,
+            1,
+            12,
+            0,
+            tzinfo=UTC,
+        ),
+    )
+
+    text = content.decode("utf-8")
+
+    assert "BEGIN:VCALENDAR" in text
+    assert "BEGIN:VEVENT" in text
+    assert "SUMMARY:Project meeting" in text
+    assert "DTSTART:20261005T080000Z" in text
+    assert "DTEND:20261005T090000Z" in text
