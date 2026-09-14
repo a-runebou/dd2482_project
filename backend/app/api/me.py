@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Annotated
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -6,6 +7,7 @@ from fastapi import (
     APIRouter,
     Depends,
     File,
+    Path,
     Query,
     Response,
     UploadFile,
@@ -213,11 +215,11 @@ def post_calendar_source(
 
 
 @router.delete(
-    "/calendar-sources/{source_id}",
+    "/calendar-sources/{sourceId}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 def remove_calendar_source(
-    source_id: UUID,
+    source_id: Annotated[UUID, Path(alias="sourceId")],
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Response:
@@ -238,12 +240,12 @@ def remove_calendar_source(
 
 
 @router.post(
-    "/calendar-sources/{source_id}/refresh",
+    "/calendar-sources/{sourceId}/refresh",
     response_model=CalendarSourceResponse,
     status_code=status.HTTP_202_ACCEPTED,
 )
 def post_calendar_refresh(
-    source_id: UUID,
+    source_id: Annotated[UUID, Path(alias="sourceId")],
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> CalendarSourceResponse:
