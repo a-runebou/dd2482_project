@@ -14,22 +14,22 @@ edit it.
 
 | ID | Topic | Status | Blocks on the frontend |
 |---|---|---|---|
-| C1 | Origin topology and CORS | open | API base URL for the deployed image |
-| C2 | Where the user lands after sign-in | open | Invite join flow |
-| C3 | Concurrent refresh and reuse detection | open | Session refresh |
-| C4 | Error bodies must match the Problem schema | open | Nothing; non-conforming errors degrade to a generic failure |
-| C5 | Minor contract and documentation inconsistencies | open | Nothing |
-| C6 | No error codes for resource limits | open | Nothing; limit errors show a generic failure |
-| C7 | Field format in validation_failed errors is unspecified | open | Nothing; unmatched entries show at form level |
-| C8 | No error code for an internal server error | open | Nothing; 500s show a generic failure |
-| C9 | Frontend expects the backend at BACKEND_ORIGIN behind one origin | open | Nothing; affects compose and Kubernetes wiring |
+| C1 | Origin topology and CORS | resolved | API base URL for the deployed image |
+| C2 | Where the user lands after sign-in | resolved | Invite join flow |
+| C3 | Concurrent refresh and reuse detection | resolved | Session refresh |
+| C4 | Error bodies must match the Problem schema | agreed | Nothing; non-conforming errors degrade to a generic failure |
+| C5 | Minor contract and documentation inconsistencies | resolved | Nothing |
+| C6 | No error codes for resource limits | resolved | Nothing; limit errors show a generic failure |
+| C7 | Field format in validation_failed errors is unspecified | resolved | Nothing; unmatched entries show at form level |
+| C8 | No error code for an internal server error | resolved | Nothing; 500s show a generic failure |
+| C9 | Frontend expects the backend at BACKEND_ORIGIN behind one origin | agreed | Nothing; affects compose and Kubernetes wiring |
 
 ---
 
 ## C1. Origin topology and CORS
 
 - Raised: 2026-09-11
-- Status: open
+- Status: resolved
 - Contract change: none
 - Documents affected: ARCHITECTURE.md D11 and section 10
 
@@ -68,12 +68,17 @@ already present in main.py, remove it rather than configure it. ARCHITECTURE.md 
 10 are to be updated to describe a single origin. Alexander to comply or to raise an objection
 before implementing auth.
 
+Resolved 2026-09-14 (T16): ARCHITECTURE D11 now reads "served from a single origin and routed by
+path" with no CORS consequence, and section 10 gained a paragraph describing the path routing,
+the frontend's `/api` proxy to `BACKEND_ORIGIN` and the relative base URL; `CORS_ALLOWED_ORIGINS`
+was replaced by `BACKEND_ORIGIN` in the required environment variables.
+
 ---
 
 ## C2. Where the user lands after sign-in
 
 - Raised: 2026-09-11
-- Status: open
+- Status: resolved
 - Contract change: none with the proposal, optional with the alternative
 - Documents affected: ARCHITECTURE.md section 6.1
 
@@ -99,12 +104,17 @@ frontend validates it again as a relative path before navigating. No OpenAPI cha
 section 6.1 is to be updated. Rejected the alternative of returning redirect_path in
 SessionResponse, because it widens the contract for no gain.
 
+Resolved 2026-09-14 (T16): ARCHITECTURE section 6.1 now shows the mail link as
+`{PUBLIC_APP_URL}/auth/callback?token=...&redirect=<redirect_path>` and states that the backend
+validates `redirect_path` against the `MagicLinkRequest` pattern before it goes into the mail.
+No contract change.
+
 ---
 
 ## C3. Concurrent refresh and reuse detection
 
 - Raised: 2026-09-11
-- Status: open
+- Status: resolved
 - Contract change: none
 - Documents affected: ARCHITECTURE.md section 6.1
 
@@ -134,12 +144,15 @@ tabs sign the user out, which is a demonstration-breaking failure. No OpenAPI ch
 ARCHITECTURE section 6.1 is to be updated. The frontend additionally serialises refreshes per tab
 and across tabs.
 
+Resolved 2026-09-14 (T16): ARCHITECTURE section 6.1 now specifies the 30-second grace window,
+what it returns and what it deliberately weakens. No contract change.
+
 ---
 
 ## C4. Error bodies must match the Problem schema
 
 - Raised: 2026-09-11
-- Status: open
+- Status: agreed
 - Contract change: possibly, see the last point
 - Documents affected: none
 
@@ -170,12 +183,16 @@ from ErrorCode. This means overriding FastAPI's default handlers for request val
 400 validation_failed, not 422), for 404 and 405, and for unhandled exceptions. A new code for
 internal errors is needed; see C8.
 
+2026-09-14 (T16): the contract gap is closed (`internal_error` exists, see C8), so nothing here
+is blocked any longer. The item stays `agreed` because it is a backend implementation
+obligation, not a document change.
+
 ---
 
 ## C5. Minor contract and documentation inconsistencies
 
 - Raised: 2026-09-11
-- Status: open
+- Status: resolved
 - Contract change: small, optional
 - Documents affected: `contracts/openapi.yaml`, ARCHITECTURE.md section 6.3
 
@@ -195,14 +212,23 @@ None of these blocks the frontend.
     If-None-Match. A change that does not bump the version produces a 304 and a silently stale
     view. Found in the frontend's own mock during T15b and fixed there.
 
-Response:
+Response (T16, 2026-09-14): all of it carried out. `If-None-Match` is declared as a reusable
+parameter and referenced from `getGroup` and `getAvailability`; `Idempotency-Key` was added to
+the nine mutating operations that lacked it; `/me/busy` now accepts `limit` and `cursor`
+(Adrian's choice, so the envelope matches every other list); `Config` gained
+`ics_poll_interval_hours`, `manual_refresh_cooldown_seconds`, `access_token_ttl_seconds`,
+`refresh_token_ttl_days` and `magic_link_ttl_seconds`, all required; `401` is declared on every
+groups and scheduling operation; ARCHITECTURE 6.3 now says `duration_minutes` and polls at
+`poll_interval_seconds`; and invariant 9 now spells out that a missed `version` increment is a
+correctness bug because the frontend polls conditionally. Honouring the increment remains a
+backend obligation.
 
 ---
 
 ## C6. No error codes for resource limits
 
 - Raised: 2026-09-11
-- Status: open
+- Status: resolved
 - Contract change: yes, small
 - Documents affected: `contracts/openapi.yaml`, ARCHITECTURE.md section 7.4
 
@@ -218,14 +244,16 @@ Proposal. Add `group_limit_reached`, `proposal_limit_reached` and
 
 Frontend meanwhile: these cases show a generic failure.
 
-Response:
+Response (T16, 2026-09-14): `group_limit_reached`, `proposal_limit_reached` and
+`calendar_source_limit_reached` added to the `ErrorCode` enum beside `member_limit_reached`, and
+to the ARCHITECTURE 7.4 table as 409s. `createGroup` now declares `409`.
 
 ---
 
 ## C7. Field format in validation_failed errors is unspecified
 
 - Raised: 2026-09-12
-- Status: open
+- Status: resolved
 - Contract change: no, a description only
 - Documents affected: `contracts/openapi.yaml`, schema `Problem`
 
@@ -241,13 +269,15 @@ change is needed beyond the description.
 
 Frontend meanwhile: matches on exact equality and shows the rest at form level.
 
-Response:
+Response (T16, 2026-09-14): the description of `Problem.errors[].field` now states the format —
+the bare property name for a top-level field, a dotted path for a nested one, for example
+`events.0.name`. No schema change.
 ---
 
 ## C8. No error code for an internal server error
 
 - Raised: 2026-09-12
-- Status: open
+- Status: resolved
 - Contract change: yes, one enum value
 - Documents affected: `contracts/openapi.yaml`, ARCHITECTURE.md section 7.4
 
@@ -260,14 +290,16 @@ no frontend change is needed once it exists.
 Frontend meanwhile: a 500 without a conformant body is classified as `unexpected` and shows a
 generic failure with a retry button. Nothing breaks.
 
-Response:
+Response (T16, 2026-09-14): `internal_error` added to the `ErrorCode` enum between
+`rate_limited` and `ics_fetch_failed`, and to the ARCHITECTURE 7.4 table as the 500 row. The
+frontend's exhaustive code map was regenerated against it and maps it to the generic branch.
 
 ---
 
 ## C9. The frontend container expects a single origin
 
 - Raised: 2026-09-12
-- Status: open
+- Status: agreed
 - Contract change: none
 - Documents affected: ARCHITECTURE.md section 4, `infra/compose/`
 
@@ -283,4 +315,7 @@ What this needs from the dev compose stack: a `backend` service reachable under 
 8000, and the frontend published on 8080. No CORS configuration, and no browser-facing backend
 port. The backend still needs its own `/healthz` and `/readyz` for its own checks.
 
-Response:
+Response (T16, 2026-09-14): the single-origin topology is now described in ARCHITECTURE section
+10 alongside the environment variables, so the wiring it implies is written down. The item stays
+`agreed` rather than `resolved` because the compose and Kubernetes changes it asks for have not
+been made; those files belong to the backend and infrastructure workstreams.

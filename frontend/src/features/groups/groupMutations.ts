@@ -4,7 +4,7 @@ import { unwrap } from "../../api/errors";
 import type { components } from "../../api/generated/schema";
 import { groupDetailKey, groupMembersKey } from "./groupQueries";
 
-type Group = components["schemas"]["Group"];
+type GroupWithInvite = components["schemas"]["GroupWithInvite"];
 type GroupPatch = components["schemas"]["GroupPatch"];
 
 export interface PatchGroupVariables {
@@ -30,7 +30,7 @@ export function patchGroupMutationOptions(
 ) {
   return {
     mutationFn: ({ body, etag, idempotencyKey }: PatchGroupVariables) =>
-      unwrap<Group>(
+      unwrap<GroupWithInvite>(
         apiClient.PATCH("/groups/{slug}", {
           body,
           params: {

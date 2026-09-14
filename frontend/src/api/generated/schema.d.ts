@@ -553,7 +553,7 @@ export interface components {
          * @description Stable machine-readable error identifier. Clients switch on this and never on detail.
          * @enum {string}
          */
-        ErrorCode: "validation_failed" | "unauthenticated" | "token_expired" | "forbidden" | "not_owner" | "not_found" | "group_not_found" | "already_member" | "group_confirmed" | "member_limit_reached" | "idempotency_key_reuse" | "version_conflict" | "slot_not_in_window" | "range_too_long" | "ics_parse_failed" | "rate_limited" | "ics_fetch_failed" | "db_circuit_open" | "service_unavailable";
+        ErrorCode: "validation_failed" | "unauthenticated" | "token_expired" | "forbidden" | "not_owner" | "not_found" | "group_not_found" | "already_member" | "group_confirmed" | "member_limit_reached" | "group_limit_reached" | "proposal_limit_reached" | "calendar_source_limit_reached" | "idempotency_key_reuse" | "version_conflict" | "slot_not_in_window" | "range_too_long" | "ics_parse_failed" | "rate_limited" | "internal_error" | "ics_fetch_failed" | "db_circuit_open" | "service_unavailable";
         /** @description RFC 9457 problem document. */
         Problem: {
             /**
@@ -569,6 +569,7 @@ export interface components {
             code: components["schemas"]["ErrorCode"];
             /** @description Field-level detail for validation_failed. */
             errors?: {
+                /** @description The bare property name for a top-level field, and a dotted path for a nested one, for example events.0.name */
                 field: string;
                 message: string;
             }[];
@@ -594,8 +595,18 @@ export interface components {
             min_duration_minutes: number;
             /** @example 480 */
             max_duration_minutes: number;
+            /** @example 6 */
+            ics_poll_interval_hours: number;
+            /** @example 300 */
+            manual_refresh_cooldown_seconds: number;
             /** @example 24 */
             reminder_lead_hours: number;
+            /** @example 900 */
+            access_token_ttl_seconds: number;
+            /** @example 30 */
+            refresh_token_ttl_days: number;
+            /** @example 900 */
+            magic_link_ttl_seconds: number;
             /**
              * @description Recommended client polling interval for the grid
              * @example 15
@@ -750,6 +761,13 @@ export interface components {
             window_end_minute?: number;
             rotate_invite_token?: boolean;
             rotate_feed_token?: boolean;
+        };
+        GroupPatched: components["schemas"]["Group"] & {
+            /**
+             * Format: uri
+             * @description Present only when the request rotated the invite token.
+             */
+            invite_url?: string;
         };
         GroupPage: {
             data: components["schemas"]["Group"][];
@@ -979,6 +997,8 @@ export interface components {
         Cursor: string;
         /** @description Optimistic concurrency. A mismatch yields 412 version_conflict. */
         IfMatch: string;
+        /** @description Conditional read carrying a previously returned ETag. A validator matching the current one yields 304 with no body, otherwise the full representation is returned. */
+        IfNoneMatch: string;
         /** @description A repeat within 24 hours replays the stored response. The same key with a different body yields 409. */
         IdempotencyKey: string;
     };
@@ -1064,6 +1084,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthenticated"];
+            429: components["responses"]["RateLimited"];
         };
     };
     deleteSession: {
@@ -1082,6 +1103,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            401: components["responses"]["Unauthenticated"];
         };
     };
     refreshSession: {
@@ -1211,7 +1233,10 @@ export interface operations {
     uploadCalendarSource: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A repeat within 24 hours replays the stored response. The same key with a different body yields 409. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -1244,7 +1269,10 @@ export interface operations {
     deleteCalendarSource: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A repeat within 24 hours replays the stored response. The same key with a different body yields 409. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 sourceId: components["parameters"]["SourceId"];
             };
@@ -1266,7 +1294,10 @@ export interface operations {
     refreshCalendarSource: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A repeat within 24 hours replays the stored response. The same key with a different body yields 409. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 sourceId: components["parameters"]["SourceId"];
             };
@@ -1293,6 +1324,8 @@ export interface operations {
             query: {
                 from: string;
                 to: string;
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
             };
             header?: never;
             path?: never;
@@ -1364,13 +1397,17 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthenticated"];
+            409: components["responses"]["Conflict"];
             422: components["responses"]["UnprocessableEntity"];
         };
     };
     getGroup: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Conditional read carrying a previously returned ETag. A validator matching the current one yields 304 with no body, otherwise the full representation is returned. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
             path: {
                 slug: components["parameters"]["Slug"];
             };
@@ -1402,7 +1439,10 @@ export interface operations {
     deleteGroup: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A repeat within 24 hours replays the stored response. The same key with a different body yields 409. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 slug: components["parameters"]["Slug"];
             };
@@ -1417,6 +1457,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
@@ -1448,9 +1489,10 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Group"];
+                    "application/json": components["schemas"]["GroupPatched"];
                 };
             };
+            401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
@@ -1510,13 +1552,17 @@ export interface operations {
                     "application/json": components["schemas"]["MemberPage"];
                 };
             };
+            401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
         };
     };
     removeMember: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A repeat within 24 hours replays the stored response. The same key with a different body yields 409. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 slug: components["parameters"]["Slug"];
                 userId: components["parameters"]["UserId"];
@@ -1532,6 +1578,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
@@ -1539,7 +1586,10 @@ export interface operations {
     getAvailability: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Conditional read carrying a previously returned ETag. A validator matching the current one yields 304 with no body, otherwise the full representation is returned. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
             path: {
                 slug: components["parameters"]["Slug"];
             };
@@ -1564,6 +1614,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
             503: components["responses"]["ServiceUnavailable"];
         };
@@ -1588,6 +1639,7 @@ export interface operations {
                     "application/json": components["schemas"]["AvailabilitySelection"];
                 };
             };
+            401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -1619,6 +1671,7 @@ export interface operations {
                     "application/json": components["schemas"]["AvailabilitySelection"];
                 };
             };
+            401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["UnprocessableEntity"];
@@ -1648,6 +1701,7 @@ export interface operations {
                     "application/json": components["schemas"]["SuggestionPage"];
                 };
             };
+            401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["UnprocessableEntity"];
         };
@@ -1673,6 +1727,7 @@ export interface operations {
                     "application/json": components["schemas"]["ProposalPage"];
                 };
             };
+            401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -1703,6 +1758,7 @@ export interface operations {
                     "application/json": components["schemas"]["Proposal"];
                 };
             };
+            401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
@@ -1712,7 +1768,10 @@ export interface operations {
     deleteProposal: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A repeat within 24 hours replays the stored response. The same key with a different body yields 409. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 slug: components["parameters"]["Slug"];
                 proposalId: components["parameters"]["ProposalId"];
@@ -1728,6 +1787,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
@@ -1736,7 +1796,10 @@ export interface operations {
     putMyVote: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A repeat within 24 hours replays the stored response. The same key with a different body yields 409. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 slug: components["parameters"]["Slug"];
                 proposalId: components["parameters"]["ProposalId"];
@@ -1758,6 +1821,7 @@ export interface operations {
                     "application/json": components["schemas"]["Proposal"];
                 };
             };
+            401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
         };
@@ -1765,7 +1829,10 @@ export interface operations {
     deleteMyVote: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A repeat within 24 hours replays the stored response. The same key with a different body yields 409. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 slug: components["parameters"]["Slug"];
                 proposalId: components["parameters"]["ProposalId"];
@@ -1781,6 +1848,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
         };
@@ -1812,6 +1880,7 @@ export interface operations {
                     "application/json": components["schemas"]["Group"];
                 };
             };
+            401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
@@ -1820,7 +1889,10 @@ export interface operations {
     unconfirmGroup: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A repeat within 24 hours replays the stored response. The same key with a different body yields 409. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 slug: components["parameters"]["Slug"];
             };
@@ -1837,6 +1909,7 @@ export interface operations {
                     "application/json": components["schemas"]["Group"];
                 };
             };
+            401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];

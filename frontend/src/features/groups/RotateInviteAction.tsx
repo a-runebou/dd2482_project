@@ -14,21 +14,6 @@ interface RotateInviteActionProps {
   etag: string | undefined;
 }
 
-/**
- * The rotation response is typed `Group` by the contract, which documents `invite_url` as
- * returned "on creation and on rotation only" but does not put it in the PATCH response schema
- * (see the agent log for the contract note). Reading it is therefore a runtime narrowing of an
- * extra property rather than a hand-written response type, and a server that does not send one
- * simply leaves the panel closed.
- */
-function readInviteUrl(value: unknown): string | undefined {
-  if (typeof value !== "object" || value === null) {
-    return undefined;
-  }
-  const candidate: unknown = Reflect.get(value, "invite_url");
-  return typeof candidate === "string" ? candidate : undefined;
-}
-
 export function RotateInviteAction({
   slug,
   name,
@@ -50,7 +35,7 @@ export function RotateInviteAction({
       },
       {
         onSuccess: (group) => {
-          setInviteUrl(readInviteUrl(group));
+          setInviteUrl(group.invite_url);
           setConfirming(false);
           // Drop the mutation's cached result as well, so the link is held in exactly one place.
           mutation.reset();

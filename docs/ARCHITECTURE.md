@@ -37,7 +37,7 @@ If the code and the contract disagree, the code is wrong.
 | D8 | Export by one-off `.ics` download and by a token-scoped read-only feed | No Google Calendar OAuth |
 | D9 | Spec-first. `contracts/openapi.yaml` is hand-written and normative; FastAPI conforms to it, the frontend generates its types from it | CI verifies conformance; frontend is unblocked by a mock server on day one |
 | D10 | REST under `/api/v1`, UUIDv7 internally, groups addressed by a 12-character slug, RFC 9457 problem responses with a stable `code`, cursor envelopes on lists, `Idempotency-Key` on mutating requests | See section 7 |
-| D11 | Short-lived JWT access token held in memory, refresh token in an HttpOnly cookie, SPA and API on different origins, CORS allow-listed per environment | See risk R1 (no TLS) |
+| D11 | Short-lived JWT access token held in memory, refresh token in an HttpOnly cookie, SPA and API served from a single origin and routed by path | No CORS configuration anywhere; the refresh cookie is first-party. See risk R1 (no TLS) |
 | D12 | The backend is authoritative for all validation; limits are served from `GET /api/v1/config` so neither side hard-codes them | The frontend may duplicate validation for UX only |
 | D13 | Production runs Kubernetes on a free-tier target; the platform is replaceable, the manifests are not | See section 11 |
 | D14 | PostgreSQL 16, SQLAlchemy 2.0 and Alembic; schema owned by the backend author | Only the ERD and its invariants are fixed here |
@@ -150,7 +150,10 @@ Invariants the backend must enforce (each maps to an error code in section 7.4):
    of scope in v1, so: cannot leave).
 8. Busy blocks are per user, not per group. A user imports once and it applies everywhere.
 9. `version` on the group increments on every change to the group, its memberships, its
-   availability, its proposals or its votes. It is the value behind the `ETag`.
+   availability, its proposals or its votes. It is the value behind the `ETag`. The frontend
+   polls the group and the availability matrix with `If-None-Match`, so a mutation that does not
+   increment `version` answers `304` and produces a silently stale view. A missed increment is
+   therefore a correctness bug, not a caching nicety.
 
 ### 5.1 Suggestion algorithm (layer 1)
 
@@ -185,7 +188,7 @@ sequenceDiagram
   FE->>BE: POST /auth/magic-link {email}
   BE->>BE: upsert user, create single-use token
   BE->>WK: enqueue job email_send
-  WK-->>FE: (e-mail with link to /auth/callback?token=...)
+  WK-->>FE: (e-mail with link to /auth/callback?token=...&redirect=<redirect_path>)
   FE->>BE: POST /auth/session {token}
   BE-->>FE: 200 {access_token, user} + Set-Cookie refresh_token
   FE->>BE: POST /auth/refresh (cookie only) when access token expires
@@ -193,6 +196,19 @@ sequenceDiagram
 
 Access token lifetime 15 minutes, refresh token 30 days, rotated on every use, reuse of a
 consumed refresh token revokes the whole family. Magic link lifetime 15 minutes, single use.
+
+The mail links to `{PUBLIC_APP_URL}/auth/callback?token=...&redirect=<redirect_path>`, carrying
+the `redirect_path` from `POST /auth/magic-link` so the user returns to where they started, an
+invite route in particular. The backend validates `redirect_path` against the pattern in
+`MagicLinkRequest` before it goes into the mail, and the frontend validates it again as a path
+relative to this origin before navigating. Nothing is returned in `SessionResponse`.
+
+Reuse detection has a 30-second grace window: presenting the immediately preceding refresh token
+within that window answers `401 unauthenticated` without revoking the family. Outside the window,
+and for any older token in the family, reuse revokes the whole family as specified. Without the
+grace window, two open tabs, React's development-mode double effects or a reload that discards
+the rotated cookie would sign the user out everywhere; the cost is weaker theft detection inside
+those 30 seconds.
 
 ### 6.2 Schedule import
 
@@ -210,7 +226,7 @@ sequenceDiagram
   actor M as Member
   actor O as Owner
   M->>BE: PUT /groups/{slug}/availability/me (full replace)
-  O->>BE: GET /groups/{slug}/suggestions?duration=60
+  O->>BE: GET /groups/{slug}/suggestions?duration_minutes=60
   O->>BE: POST /groups/{slug}/proposals (from a suggestion, or manual)
   M->>BE: PUT /groups/{slug}/proposals/{id}/vote/me {value}
   O->>BE: POST /groups/{slug}/confirmation {proposal_id}
@@ -220,8 +236,9 @@ sequenceDiagram
 
 Availability writes are a full replacement of that user's rows for that group, which makes them
 idempotent and avoids patch semantics. The grid view polls
-`GET /groups/{slug}/availability` with `If-None-Match` every 15 seconds while visible; a 304 is
-the expected common case.
+`GET /groups/{slug}/availability` with `If-None-Match` while visible, at the interval served as
+`poll_interval_seconds` by `GET /config`; neither side hard-codes it. A 304 is the expected
+common case.
 
 ### 6.4 Reminders
 
@@ -353,12 +370,16 @@ Stable strings, exhaustive for v1. The frontend may switch on these; it must nev
 | 409 | `already_member` | Join on an existing membership |
 | 409 | `group_confirmed` | Write attempted on a confirmed group |
 | 409 | `member_limit_reached` | |
+| 409 | `group_limit_reached` | `max_groups_per_user` would be exceeded |
+| 409 | `proposal_limit_reached` | `max_proposals_per_group` would be exceeded |
+| 409 | `calendar_source_limit_reached` | `max_calendar_sources` would be exceeded |
 | 409 | `idempotency_key_reuse` | Same key, different body |
 | 412 | `version_conflict` | `If-Match` mismatch |
 | 422 | `slot_not_in_window` | Slot misaligned or outside range or window |
 | 422 | `range_too_long` | Date range exceeds the limit |
 | 422 | `ics_parse_failed` | Uploaded or fetched calendar unusable |
 | 429 | `rate_limited` | `Retry-After` set |
+| 500 | `internal_error` | Unhandled server error; the only code a 500 carries |
 | 502 | `ics_fetch_failed` | Upstream calendar unreachable |
 | 503 | `db_circuit_open` | Circuit breaker open, `Retry-After` set |
 | 503 | `service_unavailable` | Dependency down, not the database |
@@ -441,11 +462,19 @@ Oracle Cloud Always Free ARM instances running k3s, and finally k3s on a second 
 manifests must not depend on which of these is chosen: no cloud-specific ingress annotations
 outside an overlay, no managed-database assumptions in the base.
 
+The SPA and the API are served from one origin in every environment, routed by path: `/api` to
+the backend, everything else to the frontend. The frontend image serves the bundle and proxies
+`/api` to `BACKEND_ORIGIN`, passing the path through unchanged, so `/api/v1/config` reaches the
+backend as `/api/v1/config`; in development the Vite server proxies the same path. There is
+therefore no CORS configuration in any environment, no expose-headers list for `ETag` and
+`Retry-After`, and the refresh cookie is first-party, so `SameSite=Lax` is enough. The frontend
+keeps a relative `/api/v1` base URL and bakes in no API host.
+
 Configuration is environment variables only, no config files baked into images. Required:
-`DATABASE_URL`, `JWT_SECRET`, `PUBLIC_API_URL`, `PUBLIC_APP_URL`, `CORS_ALLOWED_ORIGINS`,
-`SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, `OPS_ALERT_EMAIL`,
-`AUTH_COOKIE_SECURE`, `ENVIRONMENT`. Secrets come from GitHub Actions secrets into Kubernetes
-secrets; nothing secret is committed.
+`DATABASE_URL`, `JWT_SECRET`, `PUBLIC_API_URL`, `PUBLIC_APP_URL`, `BACKEND_ORIGIN` (frontend
+image only), `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`,
+`OPS_ALERT_EMAIL`, `AUTH_COOKIE_SECURE`, `ENVIRONMENT`. Secrets come from GitHub Actions secrets
+into Kubernetes secrets; nothing secret is committed.
 
 ---
 
