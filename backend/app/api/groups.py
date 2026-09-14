@@ -665,12 +665,10 @@ def get_proposals(
     response.headers["ETag"] = etag_for(version)
 
     return ProposalPageResponse(
-        data=[
-            proposal_response(proposal)
-            for proposal in proposals
-        ],
+        data=[proposal_response(proposal) for proposal in proposals],
         next_cursor=None,
     )
+
 
 @router.post(
     "/{slug}/proposals",

@@ -23,9 +23,7 @@ def ingest_events(
 ) -> Response:
     del body
 
-    return Response(
-        status_code=status.HTTP_202_ACCEPTED
-    )
+    return Response(status_code=status.HTTP_202_ACCEPTED)
 
 
 @router.get(

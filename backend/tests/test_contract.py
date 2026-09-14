@@ -15,15 +15,9 @@ HTTP_METHODS = {
 
 
 def load_contract() -> dict[str, object]:
-    contract_path = (
-        Path(__file__).resolve().parents[2]
-        / "contracts"
-        / "openapi.yaml"
-    )
+    contract_path = Path(__file__).resolve().parents[2] / "contracts" / "openapi.yaml"
 
-    with contract_path.open(
-        encoding="utf-8"
-    ) as file:
+    with contract_path.open(encoding="utf-8") as file:
         contract = yaml.safe_load(file)
 
     assert isinstance(contract, dict)
@@ -38,9 +32,7 @@ def get_contract_operations(
 
     assert isinstance(raw_paths, dict)
 
-    operations: set[
-        tuple[str, str]
-    ] = set()
+    operations: set[tuple[str, str]] = set()
 
     for path, raw_path_item in raw_paths.items():
         assert isinstance(path, str)
@@ -58,18 +50,14 @@ def get_contract_operations(
     return operations
 
 
-def get_backend_operations() -> set[
-    tuple[str, str]
-]:
+def get_backend_operations() -> set[tuple[str, str]]:
     generated = app.openapi()
 
     raw_paths = generated.get("paths")
 
     assert isinstance(raw_paths, dict)
 
-    operations: set[
-        tuple[str, str]
-    ] = set()
+    operations: set[tuple[str, str]] = set()
 
     prefix = "/api/v1"
 
@@ -77,7 +65,7 @@ def get_backend_operations() -> set[
         if not path.startswith(prefix):
             continue
 
-        contract_path = path[len(prefix):]
+        contract_path = path[len(prefix) :]
 
         if not contract_path:
             contract_path = "/"
@@ -105,32 +93,24 @@ def test_openapi_contract_is_valid() -> None:
 def test_backend_implements_all_contract_operations() -> None:
     contract = load_contract()
 
-    expected = get_contract_operations(
-        contract
-    )
+    expected = get_contract_operations(contract)
 
     actual = get_backend_operations()
 
     missing = expected - actual
 
-    assert not missing, (
-        "Backend is missing OpenAPI operations: "
-        f"{sorted(missing)}"
-    )
+    assert not missing, f"Backend is missing OpenAPI operations: {sorted(missing)}"
 
 
 def test_backend_has_no_undocumented_api_operations() -> None:
     contract = load_contract()
 
-    expected = get_contract_operations(
-        contract
-    )
+    expected = get_contract_operations(contract)
 
     actual = get_backend_operations()
 
     undocumented = actual - expected
 
     assert not undocumented, (
-        "Backend exposes undocumented operations: "
-        f"{sorted(undocumented)}"
+        f"Backend exposes undocumented operations: {sorted(undocumented)}"
     )

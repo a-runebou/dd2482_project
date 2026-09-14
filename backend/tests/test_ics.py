@@ -88,6 +88,7 @@ def test_reject_oversized_calendar() -> None:
             horizon_end=HORIZON_END,
         )
 
+
 def test_render_event_ics() -> None:
     content = render_event_ics(
         proposal_id=uuid4(),

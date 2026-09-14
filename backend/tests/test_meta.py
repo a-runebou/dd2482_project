@@ -12,12 +12,8 @@ def test_events_returns_202() -> None:
             "events": [
                 {
                     "name": "group_opened",
-                    "occurred_at": (
-                        "2026-10-05T08:00:00Z"
-                    ),
-                    "properties": {
-                        "source": "dashboard"
-                    },
+                    "occurred_at": ("2026-10-05T08:00:00Z"),
+                    "properties": {"source": "dashboard"},
                 }
             ]
         },
@@ -29,26 +25,15 @@ def test_events_returns_202() -> None:
 def test_events_validates_payload() -> None:
     response = client.post(
         "/api/v1/events",
-        json={
-            "events": [
-                {
-                    "name": "missing_timestamp"
-                }
-            ]
-        },
+        json={"events": [{"name": "missing_timestamp"}]},
     )
 
     assert response.status_code == 400
-    assert (
-        response.json()["code"]
-        == "validation_failed"
-    )
+    assert response.json()["code"] == "validation_failed"
 
 
 def test_flags_returns_empty_map() -> None:
-    response = client.get(
-        "/api/v1/flags"
-    )
+    response = client.get("/api/v1/flags")
 
     assert response.status_code == 200
     assert response.json() == {

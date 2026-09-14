@@ -41,10 +41,7 @@ def get_confirmed_event(
 
     group = view.group
 
-    if (
-        group.state != GroupState.CONFIRMED
-        or group.confirmed_proposal_id is None
-    ):
+    if group.state != GroupState.CONFIRMED or group.confirmed_proposal_id is None:
         raise GroupNotConfirmed
 
     proposal = db.get(
@@ -67,11 +64,7 @@ def get_feed_event(
     slug: str,
     token: str,
 ) -> ConfirmedEvent:
-    group = db.scalar(
-        select(Group).where(
-            Group.slug == slug
-        )
-    )
+    group = db.scalar(select(Group).where(Group.slug == slug))
 
     if group is None:
         raise FeedNotFound
@@ -84,10 +77,7 @@ def get_feed_event(
     ):
         raise FeedNotFound
 
-    if (
-        group.state != GroupState.CONFIRMED
-        or group.confirmed_proposal_id is None
-    ):
+    if group.state != GroupState.CONFIRMED or group.confirmed_proposal_id is None:
         raise FeedNotFound
 
     proposal = db.get(

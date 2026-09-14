@@ -315,6 +315,7 @@ class CalendarSourceCreate(BaseModel):
         max_length=64,
     )
 
+
 class AnalyticsEvent(BaseModel):
     name: str = Field(
         max_length=64,

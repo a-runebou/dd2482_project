@@ -62,11 +62,7 @@ def get_event_ics(
     return Response(
         content=content,
         media_type="text/calendar",
-        headers={
-            "Content-Disposition": (
-                'attachment; filename="event.ics"'
-            )
-        },
+        headers={"Content-Disposition": ('attachment; filename="event.ics"')},
     )
 
 

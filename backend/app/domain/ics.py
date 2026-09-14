@@ -136,6 +136,7 @@ def parse_ics(
 
     return result
 
+
 def render_event_ics(
     *,
     proposal_id: UUID,

@@ -28,9 +28,7 @@ def make_user() -> User:
         display_name="Alex",
         timezone="Europe/Stockholm",
         notify_email_default=True,
-        created_at=datetime.now(
-            UTC
-        ),
+        created_at=datetime.now(UTC),
     )
 
 
@@ -64,12 +62,8 @@ def make_confirmed_event(
         invite_token_hash="invite",
         feed_token_hash="feed",
         version=1,
-        created_at=datetime.now(
-            UTC
-        ),
-        updated_at=datetime.now(
-            UTC
-        ),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     proposal = Proposal(
@@ -93,9 +87,7 @@ def make_confirmed_event(
         ),
         origin=ProposalOrigin.MANUAL,
         created_by=user.id,
-        created_at=datetime.now(
-            UTC
-        ),
+        created_at=datetime.now(UTC),
     )
 
     return ConfirmedEvent(
@@ -112,28 +104,19 @@ def test_event_ics(monkeypatch) -> None:
     user = make_user()
     event = make_confirmed_event(user)
 
-    app.dependency_overrides[
-        get_current_user
-    ] = lambda: user
+    app.dependency_overrides[get_current_user] = lambda: user
 
-    app.dependency_overrides[
-        get_db
-    ] = override_db
+    app.dependency_overrides[get_db] = override_db
 
     monkeypatch.setattr(
         "app.api.export.get_confirmed_event",
         lambda *args, **kwargs: event,
     )
 
-    response = client.get(
-        "/api/v1/groups/"
-        "7fQ2mXk9Lp3R/event.ics"
-    )
+    response = client.get("/api/v1/groups/7fQ2mXk9Lp3R/event.ics")
 
     assert response.status_code == 200
-    assert response.headers[
-        "content-type"
-    ].startswith("text/calendar")
+    assert response.headers["content-type"].startswith("text/calendar")
 
     assert "BEGIN:VCALENDAR" in response.text
     assert "BEGIN:VEVENT" in response.text
@@ -143,10 +126,7 @@ def test_event_ics(monkeypatch) -> None:
 
 
 def test_event_ics_requires_auth() -> None:
-    response = client.get(
-        "/api/v1/groups/"
-        "7fQ2mXk9Lp3R/event.ics"
-    )
+    response = client.get("/api/v1/groups/7fQ2mXk9Lp3R/event.ics")
 
     assert response.status_code == 401
 
@@ -157,9 +137,7 @@ def test_calendar_feed_does_not_require_bearer(
     user = make_user()
     event = make_confirmed_event(user)
 
-    app.dependency_overrides[
-        get_db
-    ] = override_db
+    app.dependency_overrides[get_db] = override_db
 
     monkeypatch.setattr(
         "app.api.export.get_feed_event",
@@ -167,8 +145,7 @@ def test_calendar_feed_does_not_require_bearer(
     )
 
     response = client.get(
-        "/api/v1/groups/"
-        "7fQ2mXk9Lp3R/feed.ics",
+        "/api/v1/groups/7fQ2mXk9Lp3R/feed.ics",
         params={
             "token": "x" * 32,
         },
@@ -181,9 +158,6 @@ def test_calendar_feed_does_not_require_bearer(
 
 
 def test_calendar_feed_requires_token() -> None:
-    response = client.get(
-        "/api/v1/groups/"
-        "7fQ2mXk9Lp3R/feed.ics"
-    )
+    response = client.get("/api/v1/groups/7fQ2mXk9Lp3R/feed.ics")
 
     assert response.status_code == 400
