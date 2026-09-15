@@ -1,3 +1,4 @@
+from urllib.parse import quote, urlencode
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -41,8 +42,8 @@ def handle_email_send(
 
     link = (
         f"{settings.public_app_url.rstrip('/')}"
-        f"/auth/callback?token={token}"
-        f"&redirect_path={redirect_path}"
+        "/auth/callback?"
+        f"{urlencode({'token': token, 'redirect': redirect_path}, quote_via=quote)}"
     )
 
     send_email(
