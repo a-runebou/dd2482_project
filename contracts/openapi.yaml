@@ -101,6 +101,7 @@ paths:
               schema: { $ref: "#/components/schemas/SessionResponse" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
+        "429": { $ref: "#/components/responses/RateLimited" }
     delete:
       tags: [auth]
       summary: Sign out and revoke the refresh token family
@@ -108,6 +109,7 @@ paths:
       security: []
       responses:
         "204": { description: Signed out }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
 
   /auth/refresh:
     post:
@@ -198,6 +200,8 @@ paths:
       tags: [me]
       summary: Upload an .ics file as a one-off source
       operationId: uploadCalendarSource
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -227,6 +231,8 @@ paths:
       tags: [me]
       summary: Delete a source and its derived busy blocks
       operationId: deleteCalendarSource
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "204": { description: Deleted }
         "401": { $ref: "#/components/responses/Unauthenticated" }
@@ -239,6 +245,8 @@ paths:
       tags: [me]
       summary: Enqueue an immediate re-poll
       operationId: refreshCalendarSource
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "202":
           description: Poll enqueued
@@ -263,6 +271,8 @@ paths:
           in: query
           required: true
           schema: { type: string, format: date-time }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
       responses:
         "200":
           description: Busy intervals, merged and sorted by start
@@ -306,6 +316,7 @@ paths:
               schema: { $ref: "#/components/schemas/GroupWithInvite" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
+        "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
   /groups/{slug}:
@@ -316,6 +327,8 @@ paths:
       summary: Read a group
       description: Non-members receive 404 group_not_found, never 403, so slugs cannot be probed.
       operationId: getGroup
+      parameters:
+        - $ref: "#/components/parameters/IfNoneMatch"
       responses:
         "200":
           description: Group
@@ -346,7 +359,8 @@ paths:
             ETag: { $ref: "#/components/headers/ETag" }
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Group" }
+              schema: { $ref: "#/components/schemas/GroupPatched" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
@@ -356,8 +370,11 @@ paths:
       tags: [groups]
       summary: Delete a group, owner only
       operationId: deleteGroup
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -398,6 +415,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/MemberPage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /groups/{slug}/members/{userId}:
@@ -409,8 +427,11 @@ paths:
       summary: Remove a member, owner only, or leave the group yourself
       description: The owner cannot be removed and cannot leave. Deletes that member's availability and votes.
       operationId: removeMember
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "204": { description: Removed }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -424,6 +445,8 @@ paths:
         Poll this with If-None-Match while the grid is open. The recommended interval is served
         as poll_interval_seconds by GET /config.
       operationId: getAvailability
+      parameters:
+        - $ref: "#/components/parameters/IfNoneMatch"
       responses:
         "200":
           description: Matrix
@@ -433,6 +456,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/AvailabilityMatrix" }
         "304": { description: Not modified }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
         "404": { $ref: "#/components/responses/NotFound" }
         "503": { $ref: "#/components/responses/ServiceUnavailable" }
 
@@ -449,6 +473,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/AvailabilitySelection" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
         "404": { $ref: "#/components/responses/NotFound" }
     put:
       tags: [scheduling]
@@ -474,6 +499,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/AvailabilitySelection" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/UnprocessableEntity" }
@@ -500,6 +526,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SuggestionPage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
@@ -518,6 +545,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ProposalPage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
         "404": { $ref: "#/components/responses/NotFound" }
     post:
       tags: [scheduling]
@@ -537,6 +565,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Proposal" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
@@ -550,8 +579,11 @@ paths:
       tags: [scheduling]
       summary: Delete a proposal, owner only
       operationId: deleteProposal
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
@@ -564,6 +596,8 @@ paths:
       tags: [scheduling]
       summary: Cast or change the caller's vote
       operationId: putMyVote
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -575,14 +609,18 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Proposal" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
     delete:
       tags: [scheduling]
       summary: Withdraw the caller's vote
       operationId: deleteMyVote
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "204": { description: Withdrawn }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
@@ -607,6 +645,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Group" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
@@ -615,12 +654,15 @@ paths:
       summary: Unconfirm, owner only
       description: Returns the group to open and cancels pending reminders.
       operationId: unconfirmGroup
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "200":
           description: Reopened
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Group" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
@@ -639,7 +681,11 @@ paths:
             text/calendar:
               schema: { type: string }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { $ref: "#/components/responses/Conflict" }
+        "409":
+          description: The group is not confirmed, so there is no event to export (`group_not_confirmed`)
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
 
   /groups/{slug}/feed.ics:
     parameters:
@@ -750,6 +796,11 @@ components:
       in: header
       schema: { type: string }
       description: Optimistic concurrency. A mismatch yields 412 version_conflict.
+    IfNoneMatch:
+      name: If-None-Match
+      in: header
+      schema: { type: string }
+      description: "Conditional read carrying a previously returned ETag. A validator matching the current one yields 304 with no body, otherwise the full representation is returned."
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -836,15 +887,20 @@ components:
         - not_owner
         - not_found
         - group_not_found
+        - group_not_confirmed
         - already_member
         - group_confirmed
         - member_limit_reached
+        - group_limit_reached
+        - proposal_limit_reached
+        - calendar_source_limit_reached
         - idempotency_key_reuse
         - version_conflict
         - slot_not_in_window
         - range_too_long
         - ics_parse_failed
         - rate_limited
+        - internal_error
         - ics_fetch_failed
         - db_circuit_open
         - service_unavailable
@@ -857,7 +913,7 @@ components:
         type: { type: string, format: uri, default: "about:blank" }
         title: { type: string }
         status: { type: integer }
-        detail: { type: string, description: Human-readable, not for programmatic use }
+        detail: { type: string, description: "Human-readable, not for programmatic use" }
         instance: { type: string }
         code: { $ref: "#/components/schemas/ErrorCode" }
         errors:
@@ -867,7 +923,7 @@ components:
             type: object
             required: [field, message]
             properties:
-              field: { type: string }
+              field: { type: string, description: "The bare property name for a top-level field, and a dotted path for a nested one, for example events.0.name" }
               message: { type: string }
 
     Config:
@@ -883,7 +939,12 @@ components:
         - max_ics_events
         - min_duration_minutes
         - max_duration_minutes
+        - ics_poll_interval_hours
+        - manual_refresh_cooldown_seconds
         - reminder_lead_hours
+        - access_token_ttl_seconds
+        - refresh_token_ttl_days
+        - magic_link_ttl_seconds
         - poll_interval_seconds
         - environment
       properties:
@@ -897,8 +958,13 @@ components:
         max_ics_events: { type: integer, examples: [5000] }
         min_duration_minutes: { type: integer, examples: [30] }
         max_duration_minutes: { type: integer, examples: [480] }
+        ics_poll_interval_hours: { type: integer, examples: [6] }
+        manual_refresh_cooldown_seconds: { type: integer, examples: [300] }
         reminder_lead_hours: { type: integer, examples: [24] }
-        poll_interval_seconds: { type: integer, description: Recommended client polling interval for the grid, examples: [15] }
+        access_token_ttl_seconds: { type: integer, examples: [900] }
+        refresh_token_ttl_days: { type: integer, examples: [30] }
+        magic_link_ttl_seconds: { type: integer, examples: [900] }
+        poll_interval_seconds: { type: integer, description: "Recommended client polling interval for the grid", examples: [15] }
         environment: { type: string, enum: [development, staging, production] }
         build_sha: { type: string }
 
@@ -1076,6 +1142,16 @@ components:
         rotate_invite_token: { type: boolean }
         rotate_feed_token: { type: boolean }
 
+    GroupPatched:
+      allOf:
+        - $ref: "#/components/schemas/Group"
+        - type: object
+          properties:
+            invite_url:
+              type: string
+              format: uri
+              description: "Present only when the request rotated the invite token."
+
     GroupPage:
       type: object
       required: [data, next_cursor]
@@ -1175,7 +1251,7 @@ components:
       properties:
         start_at: { $ref: "#/components/schemas/Instant" }
         end_at: { $ref: "#/components/schemas/Instant" }
-        score: { type: number, description: Higher is better, comparable only within one response }
+        score: { type: number, description: "Higher is better, comparable only within one response" }
         available_user_ids:
           type: array
           items: { type: string, format: uuid }
@@ -1184,7 +1260,7 @@ components:
           items: { type: string, format: uuid }
         missing_user_ids:
           type: array
-          description: Members who are not available for the whole window, including those who have not responded.
+          description: "Members who are not available for the whole window, including those who have not responded."
           items: { type: string, format: uuid }
 
     SuggestionPage:
