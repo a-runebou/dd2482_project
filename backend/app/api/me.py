@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Annotated
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import (
@@ -28,8 +28,9 @@ from app.api.schemas import (
 )
 from app.config import get_settings
 from app.domain.ics import IcsParseError
+from app.domain.slots import SlotValidationError
 from app.infra.db import get_db
-from app.infra.models.calendar import CalendarSource
+from app.infra.models.calendar import BusyBlock, CalendarSource
 from app.infra.models.user import User
 from app.services.calendars import (
     CalendarSourceLimitReached,
@@ -41,6 +42,7 @@ from app.services.calendars import (
     refresh_calendar_source,
     upload_calendar,
 )
+from app.services.groups import decode_cursor, encode_cursor
 
 router = APIRouter(prefix="/me", tags=["me"])
 
@@ -116,6 +118,37 @@ def calendar_source_response(
     )
 
 
+def _busy_cursor_id(
+    start_at: datetime,
+    end_at: datetime,
+) -> UUID:
+    return uuid5(
+        NAMESPACE_URL,
+        f"busy:{start_at.isoformat()}:{end_at.isoformat()}",
+    )
+
+
+def _merge_busy_blocks(
+    blocks: list[BusyBlock],
+) -> list[tuple[datetime, datetime]]:
+    intervals = sorted(
+        ((block.start_at, block.end_at) for block in blocks),
+        key=lambda interval: (interval[0], interval[1]),
+    )
+
+    merged: list[tuple[datetime, datetime]] = []
+
+    for start_at, end_at in intervals:
+        if not merged or start_at > merged[-1][1]:
+            merged.append((start_at, end_at))
+            continue
+
+        previous_start, previous_end = merged[-1]
+        merged[-1] = (previous_start, max(previous_end, end_at))
+
+    return merged
+
+
 @router.post(
     "/calendar-sources/upload",
     response_model=CalendarSourceResponse,
@@ -154,7 +187,7 @@ async def post_calendar_upload(
     except CalendarSourceLimitReached as exc:
         raise ProblemException(
             status_code=409,
-            code="validation_failed",
+            code="calendar_source_limit_reached",
             title="Calendar source limit reached",
         ) from exc
 
@@ -207,7 +240,7 @@ def post_calendar_source(
     except CalendarSourceLimitReached as exc:
         raise ProblemException(
             status_code=409,
-            code="validation_failed",
+            code="calendar_source_limit_reached",
             title="Calendar source limit reached",
         ) from exc
 
@@ -266,6 +299,11 @@ def post_calendar_refresh(
             status_code=429,
             code="rate_limited",
             title="Refresh rate limited",
+            headers={
+                "Retry-After": str(
+                    get_settings().manual_refresh_cooldown_seconds
+                ),
+            },
         ) from exc
 
     return calendar_source_response(source)
@@ -278,6 +316,8 @@ def post_calendar_refresh(
 def get_busy(
     to: datetime,
     from_: datetime = Query(alias="from"),
+    limit: int = Query(default=20, ge=1, le=100),
+    cursor: str | None = Query(default=None),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> BusyBlockPageResponse:
@@ -296,14 +336,43 @@ def get_busy(
             detail=str(exc),
         ) from exc
 
+    merged = _merge_busy_blocks(blocks)
+    start_index = 0
+
+    if cursor is not None:
+        try:
+            cursor_id = decode_cursor(cursor)
+        except SlotValidationError as exc:
+            raise ProblemException(
+                status_code=400,
+                code="validation_failed",
+                title="Invalid cursor",
+                detail="cursor is invalid",
+            ) from exc
+
+        for index, (start_at, end_at) in enumerate(merged):
+            if _busy_cursor_id(start_at, end_at) == cursor_id:
+                start_index = index + 1
+                break
+        else:
+            raise ProblemException(
+                status_code=400,
+                code="validation_failed",
+                title="Invalid cursor",
+                detail="cursor is invalid",
+            )
+
+    page = merged[start_index : start_index + limit]
+    next_cursor = None
+
+    if start_index + limit < len(merged):
+        last_start, last_end = page[-1]
+        next_cursor = encode_cursor(_busy_cursor_id(last_start, last_end))
+
     return BusyBlockPageResponse(
         data=[
-            BusyBlockResponse(
-                start_at=block.start_at,
-                end_at=block.end_at,
-                source_id=block.source_id,
-            )
-            for block in blocks
+            BusyBlockResponse(start_at=start_at, end_at=end_at)
+            for start_at, end_at in page
         ],
-        next_cursor=None,
+        next_cursor=next_cursor,
     )

@@ -49,5 +49,10 @@ def test_config() -> None:
     assert data["max_groups_per_user"] == 20
     assert data["max_proposals_per_group"] == 20
     assert data["max_calendar_sources"] == 5
+    assert data["ics_poll_interval_hours"] == 6
+    assert data["manual_refresh_cooldown_seconds"] == 300
+    assert data["access_token_ttl_seconds"] == 900
+    assert data["refresh_token_ttl_days"] == 30
+    assert data["magic_link_ttl_seconds"] == 900
     assert data["min_duration_minutes"] == 30
     assert data["max_duration_minutes"] == 480
