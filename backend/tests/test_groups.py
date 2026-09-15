@@ -26,7 +26,7 @@ from app.services.availability import (
     MatrixData,
     ParticipantData,
 )
-from app.services.groups import GroupView
+from app.services.groups import GroupView, bump_group_version
 from app.services.proposals import ProposalView
 
 client = TestClient(app)
@@ -147,6 +147,60 @@ def test_get_group(monkeypatch) -> None:
 
     assert response.status_code == 200
     assert response.headers["etag"] == '"1"'
+
+    app.dependency_overrides.clear()
+
+
+def test_bump_group_version_increments_once() -> None:
+    user = make_user()
+    view = make_view(user)
+    updated_at = datetime(2026, 9, 16, 12, tzinfo=UTC)
+
+    bump_group_version(view.group, now=updated_at)
+
+    assert view.group.version == 2
+    assert view.group.updated_at == updated_at
+
+
+def test_group_etag_changes_after_mutation(monkeypatch) -> None:
+    user = make_user()
+    view = make_view(user)
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_db] = override_db
+
+    monkeypatch.setattr(
+        "app.api.groups.get_group_view",
+        lambda *args, **kwargs: view,
+    )
+
+    first_response = client.get("/api/v1/groups/7fQ2mXk9Lp3R")
+    etag_before = first_response.headers["etag"]
+
+    def mutate_group(*args, **kwargs):
+        del args, kwargs
+        bump_group_version(view.group)
+        return view
+
+    monkeypatch.setattr(
+        "app.api.groups.update_group",
+        mutate_group,
+    )
+
+    mutation_response = client.patch(
+        "/api/v1/groups/7fQ2mXk9Lp3R",
+        json={"name": "Updated"},
+    )
+
+    second_response = client.get(
+        "/api/v1/groups/7fQ2mXk9Lp3R",
+        headers={"If-None-Match": etag_before},
+    )
+
+    assert mutation_response.status_code == 200
+    assert second_response.status_code == 200
+    assert second_response.headers["etag"] == '"2"'
+    assert second_response.json()["version"] == 2
 
     app.dependency_overrides.clear()
 

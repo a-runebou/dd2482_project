@@ -21,6 +21,7 @@ from app.infra.models.user import User
 from app.services.groups import (
     GroupNotFound,
     GroupView,
+    bump_group_version,
     get_group_view,
 )
 
@@ -95,8 +96,7 @@ def join_group(
 
     db.add(membership)
 
-    group.version += 1
-    group.updated_at = datetime.now(UTC)
+    bump_group_version(group)
 
     db.commit()
 
@@ -199,7 +199,6 @@ def remove_member(
 
     db.delete(target)
 
-    view.group.version += 1
-    view.group.updated_at = datetime.now(UTC)
+    bump_group_version(view.group)
 
     db.commit()
