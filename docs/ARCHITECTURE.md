@@ -369,6 +369,7 @@ Stable strings, exhaustive for v1. The frontend may switch on these; it must nev
 | 404 | `group_not_found` | Also returned to non-members, deliberately |
 | 409 | `already_member` | Join on an existing membership |
 | 409 | `group_confirmed` | Write attempted on a confirmed group |
+| 409 | `group_not_confirmed` | Export requested for a group that is not confirmed |
 | 409 | `member_limit_reached` | |
 | 409 | `group_limit_reached` | `max_groups_per_user` would be exceeded |
 | 409 | `proposal_limit_reached` | `max_proposals_per_group` would be exceeded |

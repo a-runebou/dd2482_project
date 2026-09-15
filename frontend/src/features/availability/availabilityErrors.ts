@@ -18,6 +18,14 @@ export type AvailabilityOutcome =
 export const CONFIRMED_MESSAGE =
   "This group is confirmed, so availability can no longer be changed.";
 
+/**
+ * The freeze arriving mid-edit. The selection is deliberately left on screen rather than
+ * discarded: the user did that work, and losing it silently would be worse than being told it
+ * can no longer be sent.
+ */
+export const FROZEN_WHILE_EDITING_MESSAGE =
+  "This group was confirmed while you were editing. Your unsaved selection is still shown, but availability can no longer be saved.";
+
 export const STALE_SLOTS_MESSAGE =
   "Part of your selection is no longer inside the group's window. Nothing has been discarded; reload the grid to see the slots the server has now.";
 

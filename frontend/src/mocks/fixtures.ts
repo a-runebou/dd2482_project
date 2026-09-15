@@ -337,6 +337,15 @@ export const groupConfirmedProblem: components["schemas"]["Problem"] = {
   code: "group_confirmed",
 };
 
+/** A group with no confirmed proposal, asked for its event. Only the export answers this. */
+export const groupNotConfirmedProblem: components["schemas"]["Problem"] = {
+  type: "about:blank",
+  title: "Conflict",
+  status: 409,
+  detail: "The group is not confirmed.",
+  code: "group_not_confirmed",
+};
+
 export const notOwnerProblem: components["schemas"]["Problem"] = {
   type: "about:blank",
   title: "Forbidden",
@@ -499,22 +508,6 @@ export const proposalsGroupFixture: Group = {
   version: 4,
 };
 
-/** The same group confirmed, so the read-only branch of the proposals screen has a subject. */
-export const proposalsConfirmedGroupFixture: Group = {
-  ...proposalsGroupFixture,
-  slug: "5qS9vLe4Yw1D",
-  name: "Reading circle, settled",
-  state: "confirmed",
-  version: 11,
-};
-
-groupsBySlugFixture[proposalsGroupFixture.slug] = proposalsGroupFixture;
-groupsBySlugFixture[proposalsConfirmedGroupFixture.slug] =
-  proposalsConfirmedGroupFixture;
-membersBySlugFixture[proposalsGroupFixture.slug] = dstMembersPageFixture;
-membersBySlugFixture[proposalsConfirmedGroupFixture.slug] =
-  dstMembersPageFixture;
-
 /**
  * Two proposals of the two origins, deliberately stored out of order so that a test of the
  * rendered order is testing the sort rather than the fixture. Both windows are slot-aligned
@@ -532,6 +525,10 @@ export const manualProposalFixture: Proposal = {
   created_at: "2026-09-10T08:00:00Z",
 };
 
+/**
+ * The mixture the vote tally is read against: two members voted yes, one maybe, nobody no, and
+ * the signed-in user has not voted at all, which is what the "not voted yet" line names.
+ */
 export const suggestedProposalFixture: Proposal = {
   id: "d4c3b2a1-0000-4000-8000-000000000002",
   start_at: "2026-10-24T23:00:00Z",
@@ -547,12 +544,82 @@ export const suggestedProposalFixture: Proposal = {
   created_at: "2026-09-11T08:00:00Z",
 };
 
+/**
+ * A voter the roster does not know. The roster can legitimately lag a proposal by one read — a
+ * member who voted and then left is still in the tally — so this is a normal state, not a bug,
+ * and it must render as an unknown member rather than as a raw uuid.
+ */
+export const unknownVoterId = "b6e1d1d0-1f0a-4a3b-8c2e-eeeeeeeeeeee";
+
+/**
+ * Held out of `proposalsBySlugFixture` on purpose: a test that wants the unknown voter installs
+ * it through its own handler, so the lists every other test reads are untouched by it.
+ */
+export const unknownVoterProposalFixture: Proposal = {
+  ...manualProposalFixture,
+  id: "d4c3b2a1-0000-4000-8000-000000000004",
+  votes: { yes: [unknownVoterId], maybe: [], no: [userFixture.id] },
+  my_vote: "no",
+};
+
+/** The proposal a confirmed group settled on, carried on `Group.confirmed_proposal`. */
+export const confirmedProposalFixture: Proposal = {
+  ...suggestedProposalFixture,
+  id: "d4c3b2a1-0000-4000-8000-000000000003",
+};
+
+/**
+ * The feed token. Deliberately a marker string rather than random characters: the secret
+ * scanner flags high-entropy values, and a fixture that looks like a real credential is worth
+ * neither the allowlist entry nor the doubt.
+ */
+export const feedTokenFixture = "feed-token-example-not-a-secret";
+
+export function feedUrlFixture(slug: string): string {
+  return `${globalThis.location.origin}/api/v1/groups/${slug}/feed.ics?token=${feedTokenFixture}`;
+}
+
+/** The same group confirmed, so the read-only branch of the proposals screen has a subject. */
+export const proposalsConfirmedGroupFixture: Group = {
+  ...proposalsGroupFixture,
+  slug: "5qS9vLe4Yw1D",
+  name: "Reading circle, settled",
+  state: "confirmed",
+  confirmed_proposal: confirmedProposalFixture,
+  feed_url: feedUrlFixture("5qS9vLe4Yw1D"),
+  version: 11,
+};
+
+/**
+ * The same confirmed group as an ordinary member sees it: no owner controls, but the confirmed
+ * window, the download and the subscribable feed are all still theirs.
+ */
+export const confirmedMemberGroupFixture: Group = {
+  ...proposalsConfirmedGroupFixture,
+  slug: "7uY2wMf5Zx8E",
+  name: "Reading circle, as a member sees it",
+  my_role: "member",
+  feed_url: feedUrlFixture("7uY2wMf5Zx8E"),
+  version: 12,
+};
+
+groupsBySlugFixture[proposalsGroupFixture.slug] = proposalsGroupFixture;
+groupsBySlugFixture[proposalsConfirmedGroupFixture.slug] =
+  proposalsConfirmedGroupFixture;
+groupsBySlugFixture[confirmedMemberGroupFixture.slug] =
+  confirmedMemberGroupFixture;
+membersBySlugFixture[proposalsGroupFixture.slug] = dstMembersPageFixture;
+membersBySlugFixture[proposalsConfirmedGroupFixture.slug] =
+  dstMembersPageFixture;
+membersBySlugFixture[confirmedMemberGroupFixture.slug] = dstMembersPageFixture;
+
 export const proposalsBySlugFixture: Record<string, Proposal[]> = {
   [proposalsGroupFixture.slug]: [
     manualProposalFixture,
     suggestedProposalFixture,
   ],
-  [proposalsConfirmedGroupFixture.slug]: [suggestedProposalFixture],
+  [proposalsConfirmedGroupFixture.slug]: [confirmedProposalFixture],
+  [confirmedMemberGroupFixture.slug]: [confirmedProposalFixture],
 };
 
 export const proposalLimitReachedProblem: components["schemas"]["Problem"] = {

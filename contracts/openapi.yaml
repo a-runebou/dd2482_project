@@ -681,7 +681,11 @@ paths:
             text/calendar:
               schema: { type: string }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { $ref: "#/components/responses/Conflict" }
+        "409":
+          description: The group is not confirmed, so there is no event to export (`group_not_confirmed`)
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
 
   /groups/{slug}/feed.ics:
     parameters:
@@ -883,6 +887,7 @@ components:
         - not_owner
         - not_found
         - group_not_found
+        - group_not_confirmed
         - already_member
         - group_confirmed
         - member_limit_reached

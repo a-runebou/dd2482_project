@@ -20,6 +20,7 @@ import {
   exchangedSessionFixture,
   groupConfirmedProblem,
   groupEtag,
+  groupNotConfirmedProblem,
   groupNotFoundProblem,
   groupsBySlugFixture,
   groupsPage1Fixture,
@@ -27,6 +28,8 @@ import {
   membersBySlugFixture,
   notFoundProblem,
   notOwnerProblem,
+  confirmedProposalFixture,
+  feedUrlFixture,
   proposalLimitReachedProblem,
   proposalsBySlugFixture,
   refreshedSessionFixture,
@@ -109,6 +112,24 @@ export function advanceMockGroupVersion(slug: string): void {
   const group = groups[slug];
   if (group !== undefined) {
     groups[slug] = { ...group, version: group.version + 1 };
+  }
+}
+
+/**
+ * Confirm a group from outside a request, for tests of what happens when the state arrives
+ * while someone is editing. The version moves with it, so the next conditional read is a 200.
+ */
+export function confirmMockGroup(slug: string): void {
+  const group = groups[slug];
+  if (group !== undefined) {
+    groups[slug] = {
+      ...group,
+      state: "confirmed",
+      confirmed_proposal:
+        (proposals[slug] ?? [])[0] ?? confirmedProposalFixture,
+      feed_url: feedUrlFixture(slug),
+      version: group.version + 1,
+    };
   }
 }
 
@@ -332,6 +353,56 @@ function computeSuggestions(
         b.score - a.score || Date.parse(a.start_at) - Date.parse(b.start_at),
     )
     .slice(0, limit);
+}
+
+/**
+ * The caller's vote, applied as a replacement: the user id is removed from all three arrays
+ * before being added to one, so changing a vote can never leave the voter counted twice.
+ * `null` withdraws it.
+ */
+function withMyVote(
+  proposal: Proposal,
+  value: components["schemas"]["VoteValue"] | null,
+): Proposal {
+  const without = (ids: string[]): string[] =>
+    ids.filter((id) => id !== userFixture.id);
+  const votes = {
+    yes: without(proposal.votes.yes),
+    maybe: without(proposal.votes.maybe),
+    no: without(proposal.votes.no),
+  };
+  if (value !== null) {
+    votes[value] = [...votes[value], userFixture.id];
+  }
+  return { ...proposal, votes, my_vote: value };
+}
+
+/** An instant in the basic form iCalendar wants: 2026-10-24T23:00:00Z becomes 20261024T230000Z. */
+function icsInstant(instant: string): string {
+  return normalizeInstant(instant).replace(/[-:]/g, "");
+}
+
+/**
+ * A minimal but valid iCalendar document with the single VEVENT the contract describes. It is
+ * assembled here rather than imported as a fixture string so that the window really is the
+ * confirmed proposal's, which is what makes "confirm, then download" meaningful in the
+ * development mock.
+ */
+function icsDocument(group: Group, proposal: Proposal): string {
+  return [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Schedular//Mock//EN",
+    "BEGIN:VEVENT",
+    `UID:${proposal.id}@schedular.example`,
+    `DTSTAMP:${icsInstant(proposal.created_at)}`,
+    `DTSTART:${icsInstant(proposal.start_at)}`,
+    `DTEND:${icsInstant(proposal.end_at)}`,
+    `SUMMARY:${group.name}`,
+    "END:VEVENT",
+    "END:VCALENDAR",
+    "",
+  ].join("\r\n");
 }
 
 // Handlers match the absolute base URL the runtime client uses, so a request to a different
@@ -645,5 +716,143 @@ export const handlers = [
     bumpProposals(slug);
     advanceMockGroupVersion(slug);
     return new HttpResponse(null, { status: 204 });
+  }),
+  // --- Votes, confirmation and export -----------------------------------------------------
+  // A vote is a full replacement of the caller's own, so the PUT answers with the whole
+  // proposal: the client has no need to work out what the tally became.
+  http.put(
+    mockUrl("/groups/:slug/proposals/:proposalId/vote/me"),
+    async ({ params, request }) => {
+      const slug = pathParam(params.slug);
+      const group = groups[slug];
+      if (group === undefined) {
+        return problemResponse(groupNotFoundProblem);
+      }
+      if (group.state === "confirmed") {
+        return problemResponse(groupConfirmedProblem);
+      }
+      const existing = proposals[slug] ?? [];
+      const proposalId = pathParam(params.proposalId);
+      const target = existing.find((proposal) => proposal.id === proposalId);
+      if (target === undefined) {
+        return problemResponse(notFoundProblem);
+      }
+      const body = (await request.json()) as components["schemas"]["VoteInput"];
+      const updated = withMyVote(target, body.value);
+      proposals[slug] = existing.map((proposal) =>
+        proposal.id === proposalId ? updated : proposal,
+      );
+      bumpProposals(slug);
+      return HttpResponse.json(updated);
+    },
+  ),
+  http.delete(
+    mockUrl("/groups/:slug/proposals/:proposalId/vote/me"),
+    ({ params }) => {
+      const slug = pathParam(params.slug);
+      const group = groups[slug];
+      if (group === undefined) {
+        return problemResponse(groupNotFoundProblem);
+      }
+      if (group.state === "confirmed") {
+        return problemResponse(groupConfirmedProblem);
+      }
+      const existing = proposals[slug] ?? [];
+      const proposalId = pathParam(params.proposalId);
+      const target = existing.find((proposal) => proposal.id === proposalId);
+      if (target === undefined) {
+        return problemResponse(notFoundProblem);
+      }
+      proposals[slug] = existing.map((proposal) =>
+        proposal.id === proposalId ? withMyVote(proposal, null) : proposal,
+      );
+      bumpProposals(slug);
+      return new HttpResponse(null, { status: 204 });
+    },
+  ),
+  // Confirming is stateful on purpose: the group this hands back is the group every other
+  // handler serves from here on, so an availability write or a vote after it starts answering
+  // 409 without a test having to arrange that separately.
+  http.post(
+    mockUrl("/groups/:slug/confirmation"),
+    async ({ params, request }) => {
+      const slug = pathParam(params.slug);
+      const group = groups[slug];
+      if (group === undefined) {
+        return problemResponse(groupNotFoundProblem);
+      }
+      if (group.my_role !== "owner") {
+        return problemResponse(notOwnerProblem);
+      }
+      if (group.state === "confirmed") {
+        return problemResponse(groupConfirmedProblem);
+      }
+      const body =
+        (await request.json()) as components["schemas"]["ConfirmationRequest"];
+      const target = (proposals[slug] ?? []).find(
+        (proposal) => proposal.id === body.proposal_id,
+      );
+      if (target === undefined) {
+        return problemResponse(notFoundProblem);
+      }
+      // send_reminders is the worker's business; the mock records nothing and schedules nothing.
+      const updated: Group = {
+        ...group,
+        state: "confirmed",
+        confirmed_proposal: target,
+        feed_url: feedUrlFixture(slug),
+        version: group.version + 1,
+      };
+      groups[slug] = updated;
+      return HttpResponse.json(updated, {
+        headers: { ETag: groupEtag(updated) },
+      });
+    },
+  ),
+  // Idempotent: unconfirming a group that is already open answers with the group rather than a
+  // conflict, because the outcome the caller asked for is the one that already holds.
+  http.delete(mockUrl("/groups/:slug/confirmation"), ({ params }) => {
+    const slug = pathParam(params.slug);
+    const group = groups[slug];
+    if (group === undefined) {
+      return problemResponse(groupNotFoundProblem);
+    }
+    if (group.my_role !== "owner") {
+      return problemResponse(notOwnerProblem);
+    }
+    const updated: Group = {
+      ...group,
+      state: "open",
+      confirmed_proposal: null,
+      version: group.version + 1,
+    };
+    groups[slug] = updated;
+    return HttpResponse.json(updated, {
+      headers: { ETag: groupEtag(updated) },
+    });
+  }),
+  // Not JSON, and not a problem document either when it succeeds. A group that is not confirmed
+  // has no event to export, which the contract answers 409 group_not_confirmed.
+  http.get(mockUrl("/groups/:slug/event.ics"), ({ params }) => {
+    const slug = pathParam(params.slug);
+    const group = groups[slug];
+    if (group === undefined) {
+      return problemResponse(groupNotFoundProblem);
+    }
+    const proposal = group.confirmed_proposal;
+    if (
+      group.state !== "confirmed" ||
+      proposal === undefined ||
+      proposal === null
+    ) {
+      return problemResponse(groupNotConfirmedProblem);
+    }
+    return new HttpResponse(icsDocument(group, proposal), {
+      status: 200,
+      headers: {
+        "Content-Type": "text/calendar; charset=utf-8",
+        "Content-Disposition": 'attachment; filename="event.ics"',
+      },
+    });
   }),
 ];

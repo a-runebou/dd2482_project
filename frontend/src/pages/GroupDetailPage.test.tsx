@@ -13,6 +13,7 @@ import { server } from "../mocks/server";
 import { mockUrl } from "../mocks/urls";
 import {
   confirmedGroupFixture,
+  confirmedMemberGroupFixture,
   groupConfirmedProblem,
   groupEtag,
   groupNotFoundProblem,
@@ -23,6 +24,7 @@ import {
   notOwnerProblem,
   ownerGroupFixture,
   pendingMemberFixture,
+  proposalsConfirmedGroupFixture,
   respondedMemberFixture,
   roleUnknownGroupFixture,
   rotatedInviteUrl,
@@ -565,5 +567,39 @@ describe("GroupDetailPage, mutation errors", () => {
     expect(
       screen.queryByText(groupConfirmedProblem.title),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows the confirmed window and the download to a member of a confirmed group", async () => {
+    renderDetail(confirmedMemberGroupFixture.slug);
+
+    await screen.findByRole("heading", {
+      name: confirmedMemberGroupFixture.name,
+    });
+    expect(
+      screen.getByRole("heading", { name: /confirmed meeting/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Sun 25 Oct 2026, 01:00 to 02:30"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /calendar file/i }),
+    ).toBeInTheDocument();
+    // Unconfirming is the owner's, and this reader is not one.
+    expect(
+      screen.queryByRole("button", { name: /unconfirm this group/i }),
+    ).toBeNull();
+    expect(counts.group).toBe(1);
+  });
+
+  it("offers unconfirming to the owner of a confirmed group", async () => {
+    renderDetail(proposalsConfirmedGroupFixture.slug);
+
+    await screen.findByRole("heading", {
+      name: proposalsConfirmedGroupFixture.name,
+    });
+    expect(
+      screen.getByRole("button", { name: /unconfirm this group/i }),
+    ).toBeInTheDocument();
+    expect(counts.group).toBe(1);
   });
 });

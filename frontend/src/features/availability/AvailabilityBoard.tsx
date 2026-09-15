@@ -28,6 +28,7 @@ import {
 import { putMyAvailabilityMutationOptions } from "./availabilityMutations";
 import {
   CONFIRMED_MESSAGE,
+  FROZEN_WHILE_EDITING_MESSAGE,
   OTHERS_CHANGED_MESSAGE,
   RECONCILED_MESSAGE,
   STALE_POLL_MESSAGE,
@@ -100,7 +101,34 @@ function Notice({ children }: { children: React.ReactNode }) {
 export function AvailabilityBoard({ slug }: { slug: string }) {
   const queryClient = useQueryClient();
   const configQuery = useConfig();
-  const groupQuery = useQuery(groupQueryOptions(slug));
+
+  const saveMutation = useMutation(
+    putMyAvailabilityMutationOptions(queryClient, slug),
+  );
+
+  // The grid polls the matrix with If-None-Match while it is on screen (ARCHITECTURE 6.3), at
+  // the interval the server recommends; the number is never written here (CLAUDE.md rule 7).
+  // `refetchIntervalInBackground: false` is what stops the polling when the document is hidden,
+  // and the same focus manager refetches once when it becomes visible again.
+  //
+  // The interval is switched off entirely while a save is in flight, so that a poll cannot
+  // overlap the write, and so that the refetch the write's invalidation triggers is the only
+  // one that follows a save: turning the interval back on restarts its timer from zero.
+  const pollSeconds = configQuery.data?.poll_interval_seconds;
+  const pollInterval: number | false =
+    pollSeconds === undefined || saveMutation.isPending
+      ? false
+      : pollSeconds * 1000;
+
+  // The group is polled alongside the matrix, on the same interval and through the same
+  // conditional read, because its `state` is where the freeze comes from: a confirmation made
+  // on another screen, or by the owner in another tab, has to reach a grid that is already
+  // open. A poll that finds nothing changed costs a header exchange, as the matrix's does.
+  const groupQuery = useQuery({
+    ...groupQueryOptions(slug),
+    refetchInterval: pollInterval,
+    refetchIntervalInBackground: false,
+  });
   const group = groupQuery.data?.group;
 
   // The slots this browser works out for the group, used for the busy window and for the
@@ -128,24 +156,6 @@ export function AvailabilityBoard({ slug }: { slug: string }) {
     }
     return { from: first, to: addMinutes(last, group.slot_minutes) };
   }, [generated, group]);
-
-  const saveMutation = useMutation(
-    putMyAvailabilityMutationOptions(queryClient, slug),
-  );
-
-  // The grid polls the matrix with If-None-Match while it is on screen (ARCHITECTURE 6.3), at
-  // the interval the server recommends; the number is never written here (CLAUDE.md rule 7).
-  // `refetchIntervalInBackground: false` is what stops the polling when the document is hidden,
-  // and the same focus manager refetches once when it becomes visible again.
-  //
-  // The interval is switched off entirely while a save is in flight, so that a poll cannot
-  // overlap the write, and so that the refetch the write's invalidation triggers is the only
-  // one that follows a save: turning the interval back on restarts its timer from zero.
-  const pollSeconds = configQuery.data?.poll_interval_seconds;
-  const pollInterval: number | false =
-    pollSeconds === undefined || saveMutation.isPending
-      ? false
-      : pollSeconds * 1000;
 
   const matrixQuery = useQuery({
     ...availabilityMatrixQueryOptions(slug),
@@ -363,7 +373,11 @@ export function AvailabilityBoard({ slug }: { slug: string }) {
         Back to the group
       </Link>
 
-      {readOnly && <Notice>{CONFIRMED_MESSAGE}</Notice>}
+      {readOnly && (
+        <Notice>
+          {isDirty ? FROZEN_WHILE_EDITING_MESSAGE : CONFIRMED_MESSAGE}
+        </Notice>
+      )}
       {!reconciled && <Notice>{RECONCILED_MESSAGE}</Notice>}
       {othersChanged && <Notice>{OTHERS_CHANGED_MESSAGE}</Notice>}
       {orphanedLabels.length > 0 && (

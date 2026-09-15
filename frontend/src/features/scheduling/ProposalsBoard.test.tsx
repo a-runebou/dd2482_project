@@ -49,6 +49,7 @@ const OWNER_CONTROLS = [
   /propose this window/i,
   /add proposal/i,
   /delete proposal/i,
+  /confirm this proposal/i,
 ];
 
 async function expectOwnerControls(present: boolean): Promise<void> {
@@ -98,6 +99,28 @@ describe("ProposalsBoard", () => {
       await screen.findByText(/this group is confirmed/i),
     ).toBeInTheDocument();
     await expectOwnerControls(false);
+  });
+
+  it("offers voting on an open group", async () => {
+    renderWithProviders(<ProposalsBoard slug={SLUG} />);
+
+    await screen.findByText(SUGGESTED_WINDOW);
+    expect(
+      (await screen.findAllByRole("radio", { name: "Yes" })).length,
+    ).toBeGreaterThan(0);
+    expect(proposals.count()).toBe(1);
+  });
+
+  it("offers no voting on a confirmed group", async () => {
+    renderWithProviders(
+      <ProposalsBoard slug={proposalsConfirmedGroupFixture.slug} />,
+    );
+
+    await screen.findByText(/this group is confirmed/i);
+    expect(screen.queryByRole("radio", { name: "Yes" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /withdraw my vote/i }),
+    ).toBeNull();
   });
 
   it("hides the owner controls rather than showing an error when a read answers not_owner", async () => {

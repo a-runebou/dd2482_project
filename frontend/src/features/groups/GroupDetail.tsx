@@ -10,6 +10,8 @@ import type { components } from "../../api/generated/schema";
 import { formatDateRange } from "../../lib/date";
 import { groupQueryOptions, membersQueryOptions } from "./groupQueries";
 import { clockLabel } from "./windowOptions";
+import { ConfirmedEventPanel } from "../scheduling/ConfirmedEventPanel";
+import { UnconfirmAction } from "../scheduling/UnconfirmAction";
 import { MembersPanel } from "./MembersPanel";
 import { RenameGroupForm } from "./RenameGroupForm";
 import { RotateInviteAction } from "./RotateInviteAction";
@@ -126,6 +128,7 @@ export function GroupDetail({ slug }: { slug: string }) {
           {group.description !== undefined && group.description !== null && (
             <p className="mt-2 text-neutral-600">{group.description}</p>
           )}
+          <ConfirmedEventPanel group={group} />
           <Summary group={group} />
           {/* Every member answers the grid, so this is not gated on the owner role. */}
           <div className="mt-4 flex flex-wrap gap-4">
@@ -144,6 +147,7 @@ export function GroupDetail({ slug }: { slug: string }) {
       {group !== undefined && role === "owner" && (
         <Card className="mt-6 space-y-5">
           <h2 className="text-lg font-semibold">Owner actions</h2>
+          {group.state === "confirmed" && <UnconfirmAction slug={slug} />}
           <RenameGroupForm slug={slug} name={group.name} etag={read?.etag} />
           <RotateInviteAction slug={slug} name={group.name} etag={read?.etag} />
           <DeleteGroupAction slug={slug} name={group.name} />

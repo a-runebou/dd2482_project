@@ -14,6 +14,10 @@ import { durationMinutes, formatWindow } from "../../lib/instants";
 import { randomUuidV4 } from "../../lib/uuid";
 import type { ApiError } from "../../api/errors";
 import { proposalsKey, type ProposalsRead } from "./schedulingQueries";
+import type { MemberIndex } from "./members";
+import { ConfirmProposalAction } from "./ConfirmProposalAction";
+import { VoteControl } from "./VoteControl";
+import { VoteTally } from "./VoteTally";
 import { deleteProposalMutationOptions } from "./schedulingMutations";
 import {
   CONFIRMED_MESSAGE,
@@ -37,11 +41,17 @@ function tally(votes: Proposal["votes"]): string {
   return `${votes.yes.length} yes, ${votes.maybe.length} maybe, ${votes.no.length} no`;
 }
 
+export const CONFIRMED_PROPOSAL_MARK = "The confirmed meeting";
+
 interface RowProps {
   slug: string;
   proposal: Proposal;
   timezone: string;
+  members: MemberIndex;
   canManage: boolean;
+  canVote: boolean;
+  canConfirm: boolean;
+  isConfirmed: boolean;
 }
 
 /**
@@ -51,7 +61,16 @@ interface RowProps {
  * appearing once for the list. A deletion answering `not_found` is the outcome the user wanted:
  * the proposal has already gone, so the list is refetched and nothing is reported.
  */
-function ProposalRow({ slug, proposal, timezone, canManage }: RowProps) {
+function ProposalRow({
+  slug,
+  proposal,
+  timezone,
+  members,
+  canManage,
+  canVote,
+  canConfirm,
+  isConfirmed,
+}: RowProps) {
   const queryClient = useQueryClient();
   const mutation = useMutation(
     deleteProposalMutationOptions(queryClient, slug),
@@ -113,7 +132,25 @@ function ProposalRow({ slug, proposal, timezone, canManage }: RowProps) {
         <p className="mt-1 text-sm text-neutral-600">
           {ORIGIN_LABELS[proposal.origin]}
         </p>
+        {isConfirmed && (
+          <p className="mt-2 text-sm font-semibold text-accent">
+            {CONFIRMED_PROPOSAL_MARK}
+          </p>
+        )}
         <p className="mt-2">{tally(proposal.votes)}</p>
+        <VoteTally votes={proposal.votes} members={members} />
+
+        {canVote && (
+          <VoteControl slug={slug} proposal={proposal} windowLabel={window} />
+        )}
+
+        {canConfirm && (
+          <ConfirmProposalAction
+            slug={slug}
+            proposal={proposal}
+            windowLabel={window}
+          />
+        )}
 
         {canManage &&
           (confirming ? (
@@ -172,8 +209,16 @@ interface ProposalsListProps {
    * list. The members panel on the group detail screen is arranged the same way.
    */
   query: UseQueryResult<ProposalsRead, ApiError>;
+  /** The roster, which is the only thing that knows what to call the ids a vote carries. */
+  members: MemberIndex;
   /** Whether the reader may delete a proposal. Withdrawn rather than shown and refused. */
   canManage: boolean;
+  /** Whether the reader may vote. False for a confirmed group, where the write is refused. */
+  canVote: boolean;
+  /** Whether the reader may confirm a proposal. Owner only, and only while the group is open. */
+  canConfirm: boolean;
+  /** The proposal the group settled on, from the group's own read, or null while it is open. */
+  confirmedProposalId: string | null;
 }
 
 /**
@@ -187,7 +232,11 @@ export function ProposalsList({
   slug,
   timezone,
   query,
+  members,
   canManage,
+  canVote,
+  canConfirm,
+  confirmedProposalId,
 }: ProposalsListProps) {
   const outcome =
     query.error === null ? undefined : describeSchedulingError(query.error);
@@ -229,7 +278,11 @@ export function ProposalsList({
               slug={slug}
               proposal={proposal}
               timezone={timezone}
+              members={members}
               canManage={canManage && outcome?.kind !== "not-owner"}
+              canVote={canVote}
+              canConfirm={canConfirm && outcome?.kind !== "not-owner"}
+              isConfirmed={proposal.id === confirmedProposalId}
             />
           ))}
         </ul>

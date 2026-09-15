@@ -17,6 +17,7 @@ import {
   fastPollingConfigFixture,
 } from "../../mocks/fixtures";
 import {
+  confirmMockGroup,
   markMockParticipantAvailable,
   resetMockAvailability,
   resetMockGroups,
@@ -292,6 +293,29 @@ describe("AvailabilityBoard polling", () => {
     // Exactly one refetch follows the save: the invalidation's, and not a poll on top of it.
     expect(countOf("GET", MATRIX_PATH)).toBe(duringSave + 1);
     expect(countOf("GET", ME_PATH)).toBe(2);
+  });
+
+  it("freezes the grid when the group is confirmed mid-edit, without discarding the selection", async () => {
+    await grid();
+    clickCell(cellAt(0, 0));
+    expect(saveButton()).toBeEnabled();
+
+    confirmMockGroup(SLUG);
+
+    expect(
+      await screen.findByText(/confirmed while you were editing/i, undefined, {
+        timeout: INTERVAL_MS * 6,
+      }),
+    ).toBeInTheDocument();
+    // The work is still on screen, and there is no longer any way to send it.
+    expect(cellAt(0, 0)).toHaveAccessibleDescription(
+      /Your selection: available\./,
+    );
+    expect(cellAt(0, 0)).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: /save availability/i }),
+    ).toBeNull();
+    expect(countOf("PUT", ME_PATH)).toBe(0);
   });
 
   it("keeps the last matrix, and shows no error panel, when a poll fails", async () => {

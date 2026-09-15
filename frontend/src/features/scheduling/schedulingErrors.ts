@@ -12,6 +12,8 @@ export type SchedulingOutcome =
   | { kind: "not-owner" }
   /** The group is confirmed: the list stays on screen and stops accepting changes. */
   | { kind: "confirmed" }
+  /** The group is not confirmed, so there is no confirmed event to act on. */
+  | { kind: "not-confirmed" }
   /** The group already has as many proposals as it may have. */
   | { kind: "limit" }
   /** The window is outside the group's range or daily window. */
@@ -25,7 +27,15 @@ export const NOT_OWNER_MESSAGE =
   "Only the group's owner can add or remove proposals.";
 
 export const CONFIRMED_MESSAGE =
-  "This group is confirmed, so proposals can no longer be changed.";
+  "This group is confirmed, so proposals and votes can no longer be changed.";
+
+export const CONFIRMED_VOTE_MESSAGE =
+  "This group is confirmed, so votes can no longer be changed.";
+
+export const VOTE_FORBIDDEN_MESSAGE = "You cannot vote on this proposal.";
+
+export const NOT_OWNER_CONFIRMATION_MESSAGE =
+  "Only the group's owner can confirm or unconfirm a proposal.";
 
 export const OUTSIDE_WINDOW_MESSAGE =
   "That window is outside the group's date range or daily window.";
@@ -55,6 +65,8 @@ export function describeSchedulingError(
       return { kind: "not-owner" };
     case "group_confirmed":
       return { kind: "confirmed" };
+    case "group_not_confirmed":
+      return { kind: "not-confirmed" };
     case "proposal_limit_reached":
       return { kind: "limit" };
     case "slot_not_in_window":

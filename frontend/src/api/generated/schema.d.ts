@@ -553,7 +553,7 @@ export interface components {
          * @description Stable machine-readable error identifier. Clients switch on this and never on detail.
          * @enum {string}
          */
-        ErrorCode: "validation_failed" | "unauthenticated" | "token_expired" | "forbidden" | "not_owner" | "not_found" | "group_not_found" | "already_member" | "group_confirmed" | "member_limit_reached" | "group_limit_reached" | "proposal_limit_reached" | "calendar_source_limit_reached" | "idempotency_key_reuse" | "version_conflict" | "slot_not_in_window" | "range_too_long" | "ics_parse_failed" | "rate_limited" | "internal_error" | "ics_fetch_failed" | "db_circuit_open" | "service_unavailable";
+        ErrorCode: "validation_failed" | "unauthenticated" | "token_expired" | "forbidden" | "not_owner" | "not_found" | "group_not_found" | "group_not_confirmed" | "already_member" | "group_confirmed" | "member_limit_reached" | "group_limit_reached" | "proposal_limit_reached" | "calendar_source_limit_reached" | "idempotency_key_reuse" | "version_conflict" | "slot_not_in_window" | "range_too_long" | "ics_parse_failed" | "rate_limited" | "internal_error" | "ics_fetch_failed" | "db_circuit_open" | "service_unavailable";
         /** @description RFC 9457 problem document. */
         Problem: {
             /**
@@ -1936,7 +1936,15 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            /** @description The group is not confirmed, so there is no event to export (`group_not_confirmed`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     getGroupFeed: {

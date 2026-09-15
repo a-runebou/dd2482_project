@@ -17,7 +17,11 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { ProposalsList } from "./ProposalsList";
 import { proposalsQueryOptions } from "./schedulingQueries";
-import { pathCounter, renderWithProviders } from "./testHarness";
+import {
+  membersFixtureIndex,
+  pathCounter,
+  renderWithProviders,
+} from "./testHarness";
 
 const SLUG = proposalsGroupFixture.slug;
 const TIMEZONE = proposalsGroupFixture.timezone;
@@ -41,20 +45,32 @@ afterEach(() => {
 });
 
 /** The board owns the read in the application, so the harness owns it here. */
-function List({ canManage }: { canManage: boolean }) {
+function List({
+  canManage,
+  confirmedProposalId = null,
+}: {
+  canManage: boolean;
+  confirmedProposalId?: string | null;
+}) {
   const query = useQuery(proposalsQueryOptions(SLUG));
   return (
     <ProposalsList
       slug={SLUG}
       timezone={TIMEZONE}
       query={query}
+      members={membersFixtureIndex}
       canManage={canManage}
+      canVote={false}
+      canConfirm={false}
+      confirmedProposalId={confirmedProposalId}
     />
   );
 }
 
-function list(canManage = false) {
-  return <List canManage={canManage} />;
+function list(canManage = false, confirmedProposalId: string | null = null) {
+  return (
+    <List canManage={canManage} confirmedProposalId={confirmedProposalId} />
+  );
 }
 
 describe("ProposalsList", () => {
@@ -72,13 +88,23 @@ describe("ProposalsList", () => {
     expect(proposals.count()).toBe(1);
   });
 
-  it("offers no vote control, because voting is not part of this screen", async () => {
+  it("offers no vote control to a reader who may not vote", async () => {
     renderWithProviders(list(true));
 
     await screen.findByText(SUGGESTED_WINDOW);
     for (const label of [/^yes$/i, /^maybe$/i, /^no$/i]) {
-      expect(screen.queryByRole("button", { name: label })).toBeNull();
+      expect(screen.queryByRole("radio", { name: label })).toBeNull();
     }
+  });
+
+  it("marks the confirmed proposal, and only that one, in the list", async () => {
+    renderWithProviders(list(false, suggestedProposalFixture.id));
+
+    await screen.findByText(SUGGESTED_WINDOW);
+    const rows = screen.getAllByRole("listitem");
+    expect(rows[0]).toHaveTextContent(/confirmed meeting/i);
+    expect(rows[1]).not.toHaveTextContent(/confirmed meeting/i);
+    expect(proposals.count()).toBe(1);
   });
 
   it("sorts by start time rather than by the order the server sent", async () => {

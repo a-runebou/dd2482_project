@@ -535,8 +535,10 @@ describe("AvailabilityBoard errors", () => {
     clickCell(cellAt(0, 0));
     fireEvent.click(saveButton());
 
+    // The selection is unsaved at this point, so the wording is the mid-edit one: the work is
+    // still on screen and what has changed is that it can no longer be sent.
     expect(
-      await screen.findByText(/confirmed, so availability can no longer/i),
+      await screen.findByText(/confirmed while you were editing/i),
     ).toBeInTheDocument();
     expect(cellAt(0, 0)).toBeDisabled();
   });

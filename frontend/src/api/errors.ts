@@ -18,6 +18,7 @@ const ERROR_CODE_MAP: Record<ErrorCode, true> = {
   not_owner: true,
   not_found: true,
   group_not_found: true,
+  group_not_confirmed: true,
   already_member: true,
   group_confirmed: true,
   member_limit_reached: true,

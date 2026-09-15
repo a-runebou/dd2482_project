@@ -54,6 +54,7 @@ export function ProposalsBoard({ slug }: { slug: string }) {
 
   const group = groupQuery.data?.group;
   const config = configQuery.data;
+  const members = buildMemberIndex(membersQuery.data);
 
   if (groupQuery.isPending || configQuery.isPending) {
     return (
@@ -98,6 +99,10 @@ export function ProposalsBoard({ slug }: { slug: string }) {
     proposalsQuery.error !== null &&
     describeSchedulingError(proposalsQuery.error).kind === "not-owner";
   const mayWrite = group.my_role === "owner" && !confirmed && !refusedOnLoad;
+  // Voting is every member's, not the owner's, so it is gated on the group's state alone. The
+  // freeze is derived from the group read on every render rather than latched on the first, so
+  // a confirmation that arrives after this screen loaded withdraws the controls when it lands.
+  const mayVote = !confirmed && !refusedOnLoad;
 
   return (
     <div>
@@ -118,7 +123,7 @@ export function ProposalsBoard({ slug }: { slug: string }) {
       <SuggestionsPanel
         slug={slug}
         timezone={group.timezone}
-        members={buildMemberIndex(membersQuery.data)}
+        members={members}
         config={config}
         canPropose={mayWrite}
       />
@@ -129,7 +134,11 @@ export function ProposalsBoard({ slug }: { slug: string }) {
         slug={slug}
         timezone={group.timezone}
         query={proposalsQuery}
+        members={members}
         canManage={mayWrite}
+        canVote={mayVote}
+        canConfirm={mayWrite}
+        confirmedProposalId={group.confirmed_proposal?.id ?? null}
       />
     </div>
   );
