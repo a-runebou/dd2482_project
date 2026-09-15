@@ -754,7 +754,7 @@ def remove_proposal(
     except ProposalNotFound as exc:
         raise ProblemException(
             status_code=404,
-            code="proposal_not_found",
+            code="not_found",
             title="Proposal not found",
         ) from exc
     except NotOwner as exc:
