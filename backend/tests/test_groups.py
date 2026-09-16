@@ -12,11 +12,13 @@ from app.infra.db import get_db
 from app.infra.models.group import (
     Group,
     GroupState,
+    Membership,
     MembershipRole,
 )
 from app.infra.models.scheduling import (
     Proposal,
     ProposalOrigin,
+    Vote,
     VoteValue,
 )
 from app.infra.models.user import User
@@ -34,6 +36,7 @@ from app.services.groups import (
     GroupView,
     bump_group_version,
 )
+from app.services.memberships import remove_member
 from app.services.proposals import ProposalNotFound, ProposalView
 
 client = TestClient(app)
@@ -406,6 +409,128 @@ def test_remove_member(monkeypatch) -> None:
     assert response.status_code == 204
 
     app.dependency_overrides.clear()
+
+
+def test_remove_member_only_deletes_votes_in_target_group(monkeypatch) -> None:
+    caller = make_user()
+    target = make_user()
+    group = make_view(caller).group
+    other_group = make_view(caller).group
+    group_proposal = Proposal(
+        id=uuid4(),
+        group_id=group.id,
+        start_at=datetime(2026, 10, 1, 8, 0, tzinfo=UTC),
+        end_at=datetime(2026, 10, 1, 8, 30, tzinfo=UTC),
+        origin=ProposalOrigin.MANUAL,
+        created_by=caller.id,
+        created_at=datetime.now(UTC),
+    )
+    other_group_proposal = Proposal(
+        id=uuid4(),
+        group_id=other_group.id,
+        start_at=datetime(2026, 10, 2, 8, 0, tzinfo=UTC),
+        end_at=datetime(2026, 10, 2, 8, 30, tzinfo=UTC),
+        origin=ProposalOrigin.MANUAL,
+        created_by=caller.id,
+        created_at=datetime.now(UTC),
+    )
+    votes = [
+        Vote(
+            proposal_id=group_proposal.id,
+            user_id=target.id,
+            value=VoteValue.YES,
+        ),
+        Vote(
+            proposal_id=other_group_proposal.id,
+            user_id=target.id,
+            value=VoteValue.NO,
+        ),
+    ]
+    proposal_groups = {
+        group_proposal.id: group.id,
+        other_group_proposal.id: other_group.id,
+    }
+    memberships = [
+        Membership(
+            group_id=group.id,
+            user_id=target.id,
+            role=MembershipRole.MEMBER,
+            notify_email=True,
+            joined_at=datetime.now(UTC),
+        ),
+        Membership(
+            group_id=other_group.id,
+            user_id=target.id,
+            role=MembershipRole.MEMBER,
+            notify_email=True,
+            joined_at=datetime.now(UTC),
+        ),
+    ]
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.deleted_votes: list[Vote] = []
+            self.deleted_objects: list[object] = []
+            self.committed = False
+
+        def scalar(self, statement):
+            return Membership(
+                group_id=group.id,
+                user_id=target.id,
+                role=MembershipRole.MEMBER,
+                notify_email=True,
+                joined_at=datetime.now(UTC),
+            )
+
+        def execute(self, statement):
+            compiled = statement.compile()
+            sql = str(compiled)
+            if "DELETE FROM votes" in sql:
+                assert "proposals.group_id" in sql
+                target_group_id = next(
+                    value
+                    for value in compiled.params.values()
+                    if value in proposal_groups.values()
+                )
+                self.deleted_votes = [
+                    vote
+                    for vote in votes
+                    if proposal_groups[vote.proposal_id] == target_group_id
+                ]
+
+        def delete(self, value) -> None:
+            self.deleted_objects.append(value)
+
+        def commit(self) -> None:
+            self.committed = True
+
+    session = FakeSession()
+    view = GroupView(
+        group=group,
+        member_count=2,
+        my_role=MembershipRole.OWNER,
+    )
+    monkeypatch.setattr(
+        "app.services.memberships.get_group_view",
+        lambda *args, **kwargs: view,
+    )
+
+    remove_member(
+        session,
+        slug=group.slug,
+        caller_id=caller.id,
+        target_user_id=target.id,
+    )
+
+    assert {membership.group_id for membership in memberships} == {
+        group.id,
+        other_group.id,
+    }
+    assert group_proposal.id in {vote.proposal_id for vote in session.deleted_votes}
+    assert other_group_proposal.id not in {
+        vote.proposal_id for vote in session.deleted_votes
+    }
+    assert session.committed
 
 
 def test_get_my_availability(monkeypatch) -> None:

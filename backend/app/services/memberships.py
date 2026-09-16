@@ -15,6 +15,7 @@ from app.infra.models.group import (
 )
 from app.infra.models.scheduling import (
     Availability,
+    Proposal,
     Vote,
 )
 from app.infra.models.user import User
@@ -194,6 +195,11 @@ def remove_member(
     db.execute(
         delete(Vote).where(
             Vote.user_id == target_user_id,
+            Vote.proposal_id.in_(
+                select(Proposal.id).where(
+                    Proposal.group_id == view.group.id,
+                )
+            ),
         )
     )
 
