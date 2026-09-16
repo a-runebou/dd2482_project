@@ -18,7 +18,12 @@ class ConfigResponse(BaseModel):
     max_ics_events: int
     min_duration_minutes: int
     max_duration_minutes: int
+    ics_poll_interval_hours: int
+    manual_refresh_cooldown_seconds: int
     reminder_lead_hours: int
+    access_token_ttl_seconds: int
+    refresh_token_ttl_days: int
+    magic_link_ttl_seconds: int
     poll_interval_seconds: int
     environment: Literal["development", "staging", "production"]
     build_sha: str | None = None

@@ -16,7 +16,7 @@ from app.infra.models.scheduling import (
 )
 from app.infra.models.user import User
 from app.main import app
-from app.services.export import ConfirmedEvent
+from app.services.export import ConfirmedEvent, GroupNotConfirmed
 
 client = TestClient(app)
 
@@ -129,6 +129,25 @@ def test_event_ics_requires_auth() -> None:
     response = client.get("/api/v1/groups/7fQ2mXk9Lp3R/event.ics")
 
     assert response.status_code == 401
+
+
+def test_event_ics_for_unconfirmed_group_returns_conflict(monkeypatch) -> None:
+    user = make_user()
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_db] = override_db
+
+    def fail(*args, **kwargs):
+        raise GroupNotConfirmed
+
+    monkeypatch.setattr("app.api.export.get_confirmed_event", fail)
+
+    response = client.get("/api/v1/groups/7fQ2mXk9Lp3R/event.ics")
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "group_not_confirmed"
+
+    app.dependency_overrides.clear()
 
 
 def test_calendar_feed_does_not_require_bearer(

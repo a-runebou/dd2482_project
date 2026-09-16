@@ -15,12 +15,14 @@ from app.infra.models.group import (
 )
 from app.infra.models.scheduling import (
     Availability,
+    Proposal,
     Vote,
 )
 from app.infra.models.user import User
 from app.services.groups import (
     GroupNotFound,
     GroupView,
+    bump_group_version,
     get_group_view,
 )
 
@@ -95,8 +97,7 @@ def join_group(
 
     db.add(membership)
 
-    group.version += 1
-    group.updated_at = datetime.now(UTC)
+    bump_group_version(group)
 
     db.commit()
 
@@ -194,12 +195,16 @@ def remove_member(
     db.execute(
         delete(Vote).where(
             Vote.user_id == target_user_id,
+            Vote.proposal_id.in_(
+                select(Proposal.id).where(
+                    Proposal.group_id == view.group.id,
+                )
+            ),
         )
     )
 
     db.delete(target)
 
-    view.group.version += 1
-    view.group.updated_at = datetime.now(UTC)
+    bump_group_version(view.group)
 
     db.commit()

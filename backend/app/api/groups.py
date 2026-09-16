@@ -45,6 +45,7 @@ from app.infra.models.scheduling import (
 )
 from app.infra.models.user import User
 from app.services.availability import (
+    GroupConfirmed,
     get_availability_matrix,
     get_my_availability,
     put_my_availability,
@@ -148,8 +149,8 @@ def raise_group_error(exc: Exception) -> None:
 
     if isinstance(exc, GroupLimitReached):
         raise ProblemException(
-            status_code=400,
-            code="validation_failed",
+            status_code=409,
+            code="group_limit_reached",
             title="Group limit reached",
         ) from exc
 
@@ -545,6 +546,12 @@ def put_own_availability(
             code="group_not_found",
             title="Group not found",
         ) from exc
+    except GroupConfirmed as exc:
+        raise ProblemException(
+            status_code=409,
+            code="group_confirmed",
+            title="Group confirmed",
+        ) from exc
     except ProposalLimitReached as exc:
         raise ProblemException(
             status_code=400,
@@ -754,7 +761,7 @@ def remove_proposal(
     except ProposalNotFound as exc:
         raise ProblemException(
             status_code=404,
-            code="proposal_not_found",
+            code="not_found",
             title="Proposal not found",
         ) from exc
     except NotOwner as exc:
@@ -794,10 +801,13 @@ def put_my_vote(
             proposal_id=proposal_id,
             value=VoteValue(body.value),
         )
-    except (
-        GroupNotFound,
-        ProposalNotFound,
-    ) as exc:
+    except GroupNotFound as exc:
+        raise ProblemException(
+            status_code=404,
+            code="group_not_found",
+            title="Group not found",
+        ) from exc
+    except ProposalNotFound as exc:
         raise ProblemException(
             status_code=404,
             code="not_found",
@@ -830,10 +840,13 @@ def delete_my_vote(
             user_id=user.id,
             proposal_id=proposal_id,
         )
-    except (
-        GroupNotFound,
-        ProposalNotFound,
-    ) as exc:
+    except GroupNotFound as exc:
+        raise ProblemException(
+            status_code=404,
+            code="group_not_found",
+            title="Group not found",
+        ) from exc
+    except ProposalNotFound as exc:
         raise ProblemException(
             status_code=404,
             code="not_found",
@@ -873,10 +886,13 @@ def post_confirmation(
             code="not_owner",
             title="Owner access required",
         ) from exc
-    except (
-        GroupNotFound,
-        ProposalNotFound,
-    ) as exc:
+    except GroupNotFound as exc:
+        raise ProblemException(
+            status_code=404,
+            code="group_not_found",
+            title="Group not found",
+        ) from exc
+    except ProposalNotFound as exc:
         raise ProblemException(
             status_code=404,
             code="not_found",
@@ -922,7 +938,7 @@ def delete_confirmation(
     except NotConfirmed as exc:
         raise ProblemException(
             status_code=409,
-            code="validation_failed",
+            code="group_not_confirmed",
             title="Group is not confirmed",
         ) from exc
 

@@ -1,4 +1,5 @@
 from unittest.mock import MagicMock
+from urllib.parse import parse_qs, urlparse
 
 from app.worker.email import handle_email_send
 
@@ -18,7 +19,7 @@ def test_magic_link_email(
             "template": "magic_link",
             "email": "alex@example.com",
             "token": "abc123",
-            "redirect_path": "/",
+            "redirect_path": "/groups/example-group",
         }
     )
 
@@ -28,4 +29,11 @@ def test_magic_link_email(
 
     assert call["to"] == "alex@example.com"
 
-    assert "abc123" in call["text"]
+    link = call["text"].splitlines()[2]
+    parsed = urlparse(link)
+
+    assert parsed.path == "/auth/callback"
+    assert parse_qs(parsed.query) == {
+        "token": ["abc123"],
+        "redirect": ["/groups/example-group"],
+    }

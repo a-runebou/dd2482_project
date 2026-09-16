@@ -151,6 +151,9 @@ def http_exception_handler(
     elif exc.status_code == 404:
         code = "not_found"
         title = "Not found"
+    elif exc.status_code == 405:
+        code = "validation_failed"
+        title = "Method not allowed"
     else:
         code = "validation_failed"
         title = "Request failed"
@@ -164,6 +167,21 @@ def http_exception_handler(
         title=title,
         detail=detail,
         headers=exc.headers,
+    )
+
+
+def unhandled_exception_handler(
+    request: Request,
+    exc: Exception,
+) -> JSONResponse:
+    del exc
+
+    return problem_response(
+        request=request,
+        status_code=500,
+        code="internal_error",
+        title="Internal server error",
+        detail="An unexpected error occurred.",
     )
 
 

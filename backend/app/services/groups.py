@@ -52,6 +52,15 @@ def etag_for(version: int) -> str:
     return f'"{version}"'
 
 
+def bump_group_version(
+    group: Group,
+    *,
+    now: datetime | None = None,
+) -> None:
+    group.version += 1
+    group.updated_at = now or datetime.now(UTC)
+
+
 def encode_cursor(group_id: UUID) -> str:
     encoded = base64.urlsafe_b64encode(group_id.bytes).decode("ascii")
 
@@ -352,8 +361,7 @@ def update_group(
             if availability.slot_start not in valid_slots:
                 db.delete(availability)
 
-    group.version += 1
-    group.updated_at = datetime.now(UTC)
+    bump_group_version(group)
 
     db.commit()
     db.refresh(group)
