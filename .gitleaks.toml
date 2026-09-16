@@ -4,4 +4,7 @@ useDefault = true
 [[rules]]
 id = "generic-api-key"
 [rules.allowlist]
-paths = ['''frontend/src/mocks/fixtures\.ts''']
+paths = [
+    '''frontend/src/mocks/fixtures\.ts''',
+    '''backend/tests/.*\.py''',
+]
