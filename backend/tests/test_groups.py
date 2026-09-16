@@ -270,6 +270,37 @@ def test_patch_group(monkeypatch) -> None:
     app.dependency_overrides.clear()
 
 
+def test_patch_group_returns_rotated_invite_url(monkeypatch) -> None:
+    user = make_user()
+    view = make_view(user)
+    view = GroupView(
+        group=view.group,
+        member_count=view.member_count,
+        my_role=view.my_role,
+        rotated_invite_token="new-invite-token",
+    )
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_db] = override_db
+
+    monkeypatch.setattr(
+        "app.api.groups.update_group",
+        lambda *args, **kwargs: view,
+    )
+
+    response = client.patch(
+        "/api/v1/groups/7fQ2mXk9Lp3R",
+        json={"rotate_invite_token": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["invite_url"].endswith(
+        "/join/7fQ2mXk9Lp3R?invite=new-invite-token"
+    )
+
+    app.dependency_overrides.clear()
+
+
 def test_delete_group(monkeypatch) -> None:
     user = make_user()
 

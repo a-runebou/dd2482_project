@@ -21,6 +21,7 @@ from app.api.schemas import (
     GroupCreate,
     GroupPageResponse,
     GroupPatch,
+    GroupPatched,
     GroupResponse,
     GroupWithInviteResponse,
     JoinRequest,
@@ -272,7 +273,8 @@ def get_group(
 
 @router.patch(
     "/{slug}",
-    response_model=GroupResponse,
+    response_model=GroupPatched,
+    response_model_exclude_none=True,
 )
 def patch_group(
     slug: str,
@@ -284,7 +286,7 @@ def patch_group(
     ),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> GroupResponse:
+) -> GroupPatched:
     try:
         view = update_group(
             db,
@@ -299,7 +301,20 @@ def patch_group(
 
     response.headers["ETag"] = etag_for(view.group.version)
 
-    return group_response(view)
+    patched = group_response(view)
+    invite_url = None
+    if view.rotated_invite_token is not None:
+        settings = get_settings()
+        invite_url = (
+            f"{settings.public_app_url.rstrip('/')}"
+            f"/join/{view.group.slug}"
+            f"?invite={view.rotated_invite_token}"
+        )
+
+    return GroupPatched(
+        **patched.model_dump(),
+        invite_url=invite_url,
+    )
 
 
 @router.delete(
