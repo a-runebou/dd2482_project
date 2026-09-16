@@ -238,7 +238,7 @@ def logout_session(
     raw_token: str | None,
 ) -> None:
     if raw_token is None:
-        return
+        raise InvalidRefreshToken
 
     token_hash = hash_token(raw_token)
 
@@ -249,7 +249,7 @@ def logout_session(
     )
 
     if stored_token is None:
-        return
+        raise InvalidRefreshToken
 
     now = datetime.now(UTC)
 

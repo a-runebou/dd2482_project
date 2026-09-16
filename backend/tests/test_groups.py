@@ -23,11 +23,18 @@ from app.infra.models.user import User
 from app.main import app
 from app.services.availability import (
     AggregateData,
+    GroupConfirmed,
     MatrixData,
     ParticipantData,
 )
-from app.services.groups import GroupView, bump_group_version
-from app.services.proposals import ProposalView
+from app.services.confirmation import NotConfirmed
+from app.services.groups import (
+    GroupLimitReached,
+    GroupNotFound,
+    GroupView,
+    bump_group_version,
+)
+from app.services.proposals import ProposalNotFound, ProposalView
 
 client = TestClient(app)
 
@@ -106,6 +113,34 @@ def test_create_group(monkeypatch) -> None:
     assert response.status_code == 201
     assert response.json()["slug"] == "7fQ2mXk9Lp3R"
     assert "invite_url" in response.json()
+
+    app.dependency_overrides.clear()
+
+
+def test_create_group_limit_returns_conflict(monkeypatch) -> None:
+    user = make_user()
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_db] = override_db
+
+    def fail(*args, **kwargs):
+        raise GroupLimitReached
+
+    monkeypatch.setattr("app.api.groups.create_group", fail)
+
+    response = client.post(
+        "/api/v1/groups",
+        json={
+            "name": "Project group",
+            "date_start": "2026-10-01",
+            "date_end": "2026-10-07",
+            "window_start_minute": 480,
+            "window_end_minute": 1020,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "group_limit_reached"
 
     app.dependency_overrides.clear()
 
@@ -439,6 +474,28 @@ def test_put_my_availability(monkeypatch) -> None:
     app.dependency_overrides.clear()
 
 
+def test_put_my_availability_on_confirmed_group_returns_conflict(monkeypatch) -> None:
+    user = make_user()
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_db] = override_db
+
+    def fail(*args, **kwargs):
+        raise GroupConfirmed
+
+    monkeypatch.setattr("app.api.groups.put_my_availability", fail)
+
+    response = client.put(
+        "/api/v1/groups/7fQ2mXk9Lp3R/availability/me",
+        json={"available": [], "preferred": []},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "group_confirmed"
+
+    app.dependency_overrides.clear()
+
+
 def test_get_availability_matrix(
     monkeypatch,
 ) -> None:
@@ -614,6 +671,40 @@ def test_put_vote(monkeypatch) -> None:
     app.dependency_overrides.clear()
 
 
+@pytest.mark.parametrize(
+    ("raised", "code"),
+    [
+        (GroupNotFound, "group_not_found"),
+        (ProposalNotFound, "not_found"),
+    ],
+)
+def test_put_vote_distinguishes_group_and_proposal_not_found(
+    monkeypatch,
+    raised: type[Exception],
+    code: str,
+) -> None:
+    user = make_user()
+    proposal_id = uuid4()
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_db] = override_db
+
+    def fail(*args, **kwargs):
+        raise raised
+
+    monkeypatch.setattr("app.api.groups.put_vote", fail)
+
+    response = client.put(
+        f"/api/v1/groups/7fQ2mXk9Lp3R/proposals/{proposal_id}/vote/me",
+        json={"value": "yes"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["code"] == code
+
+    app.dependency_overrides.clear()
+
+
 def test_delete_vote(monkeypatch) -> None:
     user = make_user()
     proposal_id = uuid4()
@@ -631,6 +722,39 @@ def test_delete_vote(monkeypatch) -> None:
     )
 
     assert response.status_code == 204
+
+    app.dependency_overrides.clear()
+
+
+@pytest.mark.parametrize(
+    ("raised", "code"),
+    [
+        (GroupNotFound, "group_not_found"),
+        (ProposalNotFound, "not_found"),
+    ],
+)
+def test_delete_vote_distinguishes_group_and_proposal_not_found(
+    monkeypatch,
+    raised: type[Exception],
+    code: str,
+) -> None:
+    user = make_user()
+    proposal_id = uuid4()
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_db] = override_db
+
+    def fail(*args, **kwargs):
+        raise raised
+
+    monkeypatch.setattr("app.api.groups.delete_vote", fail)
+
+    response = client.delete(
+        f"/api/v1/groups/7fQ2mXk9Lp3R/proposals/{proposal_id}/vote/me"
+    )
+
+    assert response.status_code == 404
+    assert response.json()["code"] == code
 
     app.dependency_overrides.clear()
 
@@ -666,6 +790,39 @@ def test_confirm_group(monkeypatch) -> None:
     app.dependency_overrides.clear()
 
 
+@pytest.mark.parametrize(
+    ("raised", "code"),
+    [
+        (GroupNotFound, "group_not_found"),
+        (ProposalNotFound, "not_found"),
+    ],
+)
+def test_confirm_group_distinguishes_group_and_proposal_not_found(
+    monkeypatch,
+    raised: type[Exception],
+    code: str,
+) -> None:
+    user = make_user()
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_db] = override_db
+
+    def fail(*args, **kwargs):
+        raise raised
+
+    monkeypatch.setattr("app.api.groups.confirm_group", fail)
+
+    response = client.post(
+        "/api/v1/groups/7fQ2mXk9Lp3R/confirmation",
+        json={"proposal_id": str(uuid4()), "send_reminders": False},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["code"] == code
+
+    app.dependency_overrides.clear()
+
+
 def test_unconfirm_group(monkeypatch) -> None:
     user = make_user()
     view = make_view(user)
@@ -687,5 +844,24 @@ def test_unconfirm_group(monkeypatch) -> None:
     assert response.status_code == 200
     assert response.json()["state"] == "open"
     assert response.json()["version"] == 3
+
+    app.dependency_overrides.clear()
+
+
+def test_unconfirm_open_group_returns_conflict(monkeypatch) -> None:
+    user = make_user()
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_db] = override_db
+
+    def fail(*args, **kwargs):
+        raise NotConfirmed
+
+    monkeypatch.setattr("app.api.groups.unconfirm_group", fail)
+
+    response = client.delete("/api/v1/groups/7fQ2mXk9Lp3R/confirmation")
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "group_not_confirmed"
 
     app.dependency_overrides.clear()

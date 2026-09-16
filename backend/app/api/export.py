@@ -46,7 +46,7 @@ def get_event_ics(
     except GroupNotConfirmed as exc:
         raise ProblemException(
             status_code=409,
-            code="validation_failed",
+            code="group_not_confirmed",
             title="Group is not confirmed",
         ) from exc
 

@@ -158,6 +158,36 @@ def test_logout_returns_204(monkeypatch) -> None:
     app.dependency_overrides.clear()
 
 
+def test_logout_without_cookie_returns_401() -> None:
+    app.dependency_overrides[get_db] = override_get_db
+
+    response = client.delete("/api/v1/auth/session")
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "unauthenticated"
+
+    app.dependency_overrides.clear()
+
+
+def test_logout_with_unknown_cookie_returns_401(monkeypatch) -> None:
+    app.dependency_overrides[get_db] = override_get_db
+
+    def fail(*args, **kwargs):
+        raise InvalidRefreshToken
+
+    monkeypatch.setattr("app.api.auth.logout_session", fail)
+
+    response = client.delete(
+        "/api/v1/auth/session",
+        cookies={"refresh_token": "unknown-token"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "unauthenticated"
+
+    app.dependency_overrides.clear()
+
+
 class FakeResult:
     def __init__(self, values):
         self.values = values
