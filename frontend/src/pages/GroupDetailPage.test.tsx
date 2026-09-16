@@ -244,6 +244,51 @@ describe("GroupDetailPage, the detail view", () => {
   });
 });
 
+describe("GroupDetailPage, navigation", () => {
+  function renderDetailWithSiblings(slug: string) {
+    const client = createQueryClient();
+    const router = createMemoryRouter(
+      [
+        { path: "/groups", element: <h1>Your groups</h1> },
+        { path: "/groups/:slug", element: <GroupDetailPage /> },
+        { path: "/groups/:slug/availability", element: <h1>Availability</h1> },
+        { path: "/groups/:slug/proposals", element: <h1>Proposals</h1> },
+      ],
+      { initialEntries: [`/groups/${slug}`] },
+    );
+    render(
+      <QueryClientProvider client={client}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
+  }
+
+  it("links back to the groups list and marks itself as the current page", async () => {
+    renderDetailWithSiblings(ownerGroupFixture.slug);
+
+    await screen.findByRole("heading", { name: ownerGroupFixture.name });
+    const nav = screen.getByRole("navigation", { name: "Group" });
+    expect(
+      within(nav).getByRole("link", { name: "Your groups" }),
+    ).toHaveAttribute("href", "/groups");
+    expect(within(nav).getByText(ownerGroupFixture.name)).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
+  it("renders the breadcrumb with no error while the group read is still pending", () => {
+    server.use(http.get(mockUrl("/groups/:slug"), () => new Promise(() => {})));
+
+    expect(() =>
+      renderDetailWithSiblings(ownerGroupFixture.slug),
+    ).not.toThrow();
+    expect(
+      screen.getByRole("navigation", { name: "Group" }),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("GroupDetailPage, role chrome", () => {
   it("shows the owner actions and no leave for an owner", async () => {
     renderDetail(ownerGroupFixture.slug);

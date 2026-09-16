@@ -482,7 +482,7 @@ describe("AvailabilityBoard saving", () => {
     await grid();
 
     clickCell(cellAt(0, 0));
-    fireEvent.click(screen.getByRole("link", { name: /back to the group/i }));
+    fireEvent.click(screen.getByRole("link", { name: dstGroupFixture.name }));
 
     expect(await screen.findByText(/unsaved changes/i)).toBeInTheDocument();
     expect(
@@ -500,7 +500,7 @@ describe("AvailabilityBoard saving", () => {
   it("does not warn when there is nothing unsaved", async () => {
     await grid();
 
-    fireEvent.click(screen.getByRole("link", { name: /back to the group/i }));
+    fireEvent.click(screen.getByRole("link", { name: dstGroupFixture.name }));
 
     expect(
       await screen.findByRole("heading", { name: "Group detail" }),

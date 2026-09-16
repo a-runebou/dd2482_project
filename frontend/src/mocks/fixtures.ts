@@ -613,6 +613,44 @@ membersBySlugFixture[proposalsConfirmedGroupFixture.slug] =
   dstMembersPageFixture;
 membersBySlugFixture[confirmedMemberGroupFixture.slug] = dstMembersPageFixture;
 
+/**
+ * A window inside `memberGroupFixture`'s own daily window (09:00 to 17:00 local, 1 to 7 November
+ * 2026, Europe/Stockholm, no daylight-saving change in range): 2026-11-02T08:00Z is 09:00 CET.
+ * `memberGroupFixture` is already an open group with `my_role: "member"` and already reachable
+ * from the groups list, so giving it a proposal is what makes the vote control reachable by hand
+ * in `npm run dev:mock` without adding a group nobody would otherwise click into.
+ */
+export const memberGroupProposalFixture: Proposal = {
+  id: "d4c3b2a1-0000-4000-8000-000000000005",
+  start_at: "2026-11-02T08:00:00Z",
+  end_at: "2026-11-02T08:30:00Z",
+  origin: "manual",
+  created_by: memberGroupFixture.owner_id,
+  votes: { yes: [memberGroupOwnerFixture.user_id], maybe: [], no: [] },
+  my_vote: null,
+  created_at: "2026-09-05T08:00:00Z",
+};
+
+/**
+ * A copy of the reading circle with no `my_role`, so the "no role, no role-dependent action"
+ * invariant can be exercised on the proposals screen against a proposal to vote on, not only
+ * against an empty list; `roleUnknownGroupFixture` already exercises the same absence for the
+ * detail screen, but it is `archived` and carries no proposals of its own.
+ */
+export const proposalsRoleUnknownGroupFixture: Group = {
+  ...dstGroupFixture,
+  slug: "6rT8wNi6Zy2F",
+  name: "Reading circle, role unknown",
+  description: "No my_role on this read, with a proposal already on it.",
+  my_role: undefined,
+  version: 13,
+};
+
+groupsBySlugFixture[proposalsRoleUnknownGroupFixture.slug] =
+  proposalsRoleUnknownGroupFixture;
+membersBySlugFixture[proposalsRoleUnknownGroupFixture.slug] =
+  dstMembersPageFixture;
+
 export const proposalsBySlugFixture: Record<string, Proposal[]> = {
   [proposalsGroupFixture.slug]: [
     manualProposalFixture,
@@ -620,6 +658,8 @@ export const proposalsBySlugFixture: Record<string, Proposal[]> = {
   ],
   [proposalsConfirmedGroupFixture.slug]: [confirmedProposalFixture],
   [confirmedMemberGroupFixture.slug]: [confirmedProposalFixture],
+  [memberGroupFixture.slug]: [memberGroupProposalFixture],
+  [proposalsRoleUnknownGroupFixture.slug]: [suggestedProposalFixture],
 };
 
 export const proposalLimitReachedProblem: components["schemas"]["Problem"] = {

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { ApiErrorNotice } from "../../components/ApiErrorNotice";
 import { Card } from "../../components/Card";
+import { GroupNav } from "../../components/GroupNav";
 import { PageHeading } from "../../components/PageHeading";
 import { Spinner } from "../../components/Spinner";
 import { LINK } from "../../components/cx";
@@ -81,13 +82,16 @@ export function GroupDetail({ slug }: { slug: string }) {
 
   if (groupQuery.isPending) {
     return (
-      <p
-        role="status"
-        className="mt-6 flex items-center gap-2 text-neutral-600"
-      >
-        <Spinner />
-        Loading the group…
-      </p>
+      <div>
+        <GroupNav slug={slug} groupName={undefined} current="detail" />
+        <p
+          role="status"
+          className="mt-6 flex items-center gap-2 text-neutral-600"
+        >
+          <Spinner />
+          Loading the group…
+        </p>
+      </div>
     );
   }
 
@@ -110,6 +114,7 @@ export function GroupDetail({ slug }: { slug: string }) {
 
   return (
     <div>
+      <GroupNav slug={slug} groupName={group?.name} current="detail" />
       {group === undefined ? (
         groupQuery.error && (
           <div className="mt-6">

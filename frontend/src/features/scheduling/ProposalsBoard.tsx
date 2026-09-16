@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { ApiErrorNotice } from "../../components/ApiErrorNotice";
+import { GroupNav } from "../../components/GroupNav";
 import { PageHeading } from "../../components/PageHeading";
 import { Spinner } from "../../components/Spinner";
 import { LINK } from "../../components/cx";
@@ -58,13 +59,16 @@ export function ProposalsBoard({ slug }: { slug: string }) {
 
   if (groupQuery.isPending || configQuery.isPending) {
     return (
-      <p
-        role="status"
-        className="mt-6 flex items-center gap-2 text-neutral-600"
-      >
-        <Spinner />
-        Loading the group…
-      </p>
+      <div>
+        <GroupNav slug={slug} groupName={undefined} current="proposals" />
+        <p
+          role="status"
+          className="mt-6 flex items-center gap-2 text-neutral-600"
+        >
+          <Spinner />
+          Loading the group…
+        </p>
+      </div>
     );
   }
 
@@ -79,17 +83,20 @@ export function ProposalsBoard({ slug }: { slug: string }) {
   if (group === undefined || config === undefined) {
     const error = groupQuery.error ?? configQuery.error;
     return (
-      <div className="mt-6">
-        {error !== null && (
-          <ApiErrorNotice
-            error={error}
-            retry={() => {
-              void groupQuery.refetch();
-              void configQuery.refetch();
-            }}
-            isRetrying={groupQuery.isFetching || configQuery.isFetching}
-          />
-        )}
+      <div>
+        <GroupNav slug={slug} groupName={undefined} current="proposals" />
+        <div className="mt-6">
+          {error !== null && (
+            <ApiErrorNotice
+              error={error}
+              retry={() => {
+                void groupQuery.refetch();
+                void configQuery.refetch();
+              }}
+              isRetrying={groupQuery.isFetching || configQuery.isFetching}
+            />
+          )}
+        </div>
       </div>
     );
   }
@@ -98,18 +105,20 @@ export function ProposalsBoard({ slug }: { slug: string }) {
   const refusedOnLoad =
     proposalsQuery.error !== null &&
     describeSchedulingError(proposalsQuery.error).kind === "not-owner";
-  const mayWrite = group.my_role === "owner" && !confirmed && !refusedOnLoad;
-  // Voting is every member's, not the owner's, so it is gated on the group's state alone. The
-  // freeze is derived from the group read on every render rather than latched on the first, so
-  // a confirmation that arrives after this screen loaded withdraws the controls when it lands.
-  const mayVote = !confirmed && !refusedOnLoad;
+  const mayManageAsOwner =
+    group.my_role === "owner" && !confirmed && !refusedOnLoad;
+  // Voting is every member's, not the owner's, so it is gated on the group's state alone rather
+  // than on the owner role. It still withdraws for a caller whose role is unknown, matching the
+  // rule that no role-dependent action is shown without a role to base it on. The freeze is
+  // derived from the group read on every render rather than latched on the first, so a
+  // confirmation that arrives after this screen loaded withdraws the controls when it lands.
+  const mayVoteAsMember =
+    group.my_role !== undefined && !confirmed && !refusedOnLoad;
 
   return (
     <div>
+      <GroupNav slug={slug} groupName={group.name} current="proposals" />
       <PageHeading title="Proposals" description={group.name} />
-      <Link to={`/groups/${slug}`} className={`mt-2 inline-block ${LINK}`}>
-        Back to the group
-      </Link>
 
       {confirmed && (
         <p
@@ -125,19 +134,19 @@ export function ProposalsBoard({ slug }: { slug: string }) {
         timezone={group.timezone}
         members={members}
         config={config}
-        canPropose={mayWrite}
+        canPropose={mayManageAsOwner}
       />
 
-      {mayWrite && <ManualProposalForm group={group} config={config} />}
+      {mayManageAsOwner && <ManualProposalForm group={group} config={config} />}
 
       <ProposalsList
         slug={slug}
         timezone={group.timezone}
         query={proposalsQuery}
         members={members}
-        canManage={mayWrite}
-        canVote={mayVote}
-        canConfirm={mayWrite}
+        canManage={mayManageAsOwner}
+        canVote={mayVoteAsMember}
+        canConfirm={mayManageAsOwner}
         confirmedProposalId={group.confirmed_proposal?.id ?? null}
       />
     </div>

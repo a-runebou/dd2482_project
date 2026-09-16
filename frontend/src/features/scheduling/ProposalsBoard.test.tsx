@@ -1,12 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { server } from "../../mocks/server";
 import { mockUrl } from "../../mocks/urls";
 import {
+  confirmedMemberGroupFixture,
   dstGroupFixture,
+  memberGroupFixture,
   proposalsConfirmedGroupFixture,
   proposalsGroupFixture,
+  proposalsRoleUnknownGroupFixture,
   roleUnknownGroupFixture,
   unauthenticatedProblem,
   dbCircuitOpenProblem,
@@ -121,6 +124,37 @@ describe("ProposalsBoard", () => {
     expect(
       screen.queryByRole("button", { name: /withdraw my vote/i }),
     ).toBeNull();
+  });
+
+  it("offers no voting to a member of a confirmed group either", async () => {
+    renderWithProviders(
+      <ProposalsBoard slug={confirmedMemberGroupFixture.slug} />,
+    );
+
+    await screen.findByText(/this group is confirmed/i);
+    expect(screen.queryByRole("radio", { name: "Yes" })).toBeNull();
+  });
+
+  it("lets a member of an open group vote, and shows no owner control", async () => {
+    renderWithProviders(<ProposalsBoard slug={memberGroupFixture.slug} />);
+
+    const yes = (await screen.findAllByRole("radio", { name: "Yes" }))[0]!;
+    expect(yes).toBeInTheDocument();
+    await expectOwnerControls(false);
+
+    fireEvent.click(yes);
+
+    await waitFor(() => expect(yes).toBeChecked());
+  });
+
+  it("shows no voting control when my_role is absent, even with a proposal to vote on", async () => {
+    renderWithProviders(
+      <ProposalsBoard slug={proposalsRoleUnknownGroupFixture.slug} />,
+    );
+
+    await screen.findByText(SUGGESTED_WINDOW);
+    expect(screen.queryByRole("radio", { name: "Yes" })).toBeNull();
+    await expectOwnerControls(false);
   });
 
   it("hides the owner controls rather than showing an error when a read answers not_owner", async () => {

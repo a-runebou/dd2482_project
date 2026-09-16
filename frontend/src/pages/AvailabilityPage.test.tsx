@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { http } from "msw";
+import { render, screen, within } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { createQueryClient } from "../api/queryClient";
@@ -46,7 +47,14 @@ describe("AvailabilityPage", () => {
     expect(
       await screen.findByRole("heading", { name: "Availability" }),
     ).toBeInTheDocument();
-    expect(await screen.findByText(dstGroupFixture.name)).toBeInTheDocument();
+    // The group's name appears twice once loaded: once in the breadcrumb, which links back to
+    // the group, and once in the page's own description.
+    expect(
+      await screen.findByRole("link", { name: dstGroupFixture.name }),
+    ).toHaveAttribute("href", `/groups/${SLUG}`);
+    expect(
+      screen.getAllByText(dstGroupFixture.name).length,
+    ).toBeGreaterThanOrEqual(2);
     expect(
       await screen.findByRole("grid", { name: /availability grid/i }),
     ).toBeInTheDocument();
@@ -54,5 +62,58 @@ describe("AvailabilityPage", () => {
       screen.getByRole("grid", { name: /availability grid/i }),
     );
     expect(matrixRequests).toBe(1);
+  });
+
+  it("links back to the groups list, to the group, and across to proposals", async () => {
+    const router = createMemoryRouter(
+      [
+        { path: "/groups", element: <h1>Your groups</h1> },
+        { path: "/groups/:slug", element: <h1>Group detail</h1> },
+        { path: "/groups/:slug/availability", element: <AvailabilityPage /> },
+        { path: "/groups/:slug/proposals", element: <h1>Proposals page</h1> },
+      ],
+      { initialEntries: [`/groups/${SLUG}/availability`] },
+    );
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByRole("heading", { name: "Availability" });
+    const nav = screen.getByRole("navigation", { name: "Group" });
+
+    expect(
+      within(nav).getByRole("link", { name: "Your groups" }),
+    ).toHaveAttribute("href", "/groups");
+    expect(
+      within(nav).getByRole("link", { name: dstGroupFixture.name }),
+    ).toHaveAttribute("href", `/groups/${SLUG}`);
+    expect(within(nav).getByText("Availability")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(
+      within(nav).getByRole("link", { name: "Proposals" }),
+    ).toHaveAttribute("href", `/groups/${SLUG}/proposals`);
+  });
+
+  it("renders the breadcrumb with no error while the group read is still pending", () => {
+    server.use(http.get(mockUrl("/groups/:slug"), () => new Promise(() => {})));
+    const router = createMemoryRouter(
+      [{ path: "/groups/:slug/availability", element: <AvailabilityPage /> }],
+      { initialEntries: [`/groups/${SLUG}/availability`] },
+    );
+
+    expect(() =>
+      render(
+        <QueryClientProvider client={createQueryClient()}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>,
+      ),
+    ).not.toThrow();
+    expect(
+      screen.getByRole("navigation", { name: "Group" }),
+    ).toBeInTheDocument();
   });
 });

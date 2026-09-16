@@ -4,6 +4,7 @@ import { Link, useBlocker } from "react-router";
 import { ApiErrorNotice } from "../../components/ApiErrorNotice";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
+import { GroupNav } from "../../components/GroupNav";
 import { PageHeading } from "../../components/PageHeading";
 import { Spinner } from "../../components/Spinner";
 import { LINK } from "../../components/cx";
@@ -293,13 +294,16 @@ export function AvailabilityBoard({ slug }: { slug: string }) {
 
   if (groupQuery.isPending) {
     return (
-      <p
-        role="status"
-        className="mt-6 flex items-center gap-2 text-neutral-600"
-      >
-        <Spinner />
-        Loading the group…
-      </p>
+      <div>
+        <GroupNav slug={slug} groupName={undefined} current="availability" />
+        <p
+          role="status"
+          className="mt-6 flex items-center gap-2 text-neutral-600"
+        >
+          <Spinner />
+          Loading the group…
+        </p>
+      </div>
     );
   }
 
@@ -313,12 +317,15 @@ export function AvailabilityBoard({ slug }: { slug: string }) {
 
   if (group === undefined) {
     return (
-      <div className="mt-6">
-        <ApiErrorNotice
-          error={groupQuery.error as ApiError}
-          retry={() => void groupQuery.refetch()}
-          isRetrying={groupQuery.isFetching}
-        />
+      <div>
+        <GroupNav slug={slug} groupName={undefined} current="availability" />
+        <div className="mt-6">
+          <ApiErrorNotice
+            error={groupQuery.error as ApiError}
+            retry={() => void groupQuery.refetch()}
+            isRetrying={groupQuery.isFetching}
+          />
+        </div>
       </div>
     );
   }
@@ -368,10 +375,8 @@ export function AvailabilityBoard({ slug }: { slug: string }) {
 
   return (
     <div>
+      <GroupNav slug={slug} groupName={group.name} current="availability" />
       <PageHeading title="Availability" description={group.name} />
-      <Link to={`/groups/${slug}`} className={`mt-2 inline-block ${LINK}`}>
-        Back to the group
-      </Link>
 
       {readOnly && (
         <Notice>
