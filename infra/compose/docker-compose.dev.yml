@@ -21,11 +21,22 @@ services:
       SMTP_FROM: ${SMTP_FROM}
       OPS_ALERT_EMAIL: ${OPS_ALERT_EMAIL}
 
-    ports:
-      - "8000:8000"
-
     volumes:
       - ../../backend:/app
+
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+
+    depends_on:
+      - backend
+
+    environment:
+      BACKEND_ORIGIN: http://backend:8000
+
+    ports:
+      - "8080:8080"
 
   postgres:
     image: postgres:16

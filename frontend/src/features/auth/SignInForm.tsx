@@ -94,7 +94,9 @@ function Confirmation({
 }
 
 export function SignInForm() {
-  const mutation = useMutation(requestMagicLinkMutationOptions());
+  const mutation = useMutation(
+    requestMagicLinkMutationOptions(globalThis.location.pathname),
+  );
 
   const [email, setEmail] = useState("");
   const [uxError, setUxError] = useState<string | undefined>(undefined);
