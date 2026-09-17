@@ -79,9 +79,8 @@ describe("JoinPage", () => {
     let redirectPath: string | undefined;
     server.use(
       http.post(mockUrl("/auth/magic-link"), async ({ request }) => {
-        redirectPath = (
-          (await request.json()) as { redirect_path: string }
-        ).redirect_path;
+        redirectPath = ((await request.json()) as { redirect_path: string })
+          .redirect_path;
         return new HttpResponse(null, { status: 202 });
       }),
     );
@@ -116,7 +115,9 @@ describe("JoinPage", () => {
   it("resumes joining after sign-in using the stored invite", async () => {
     sessionStorage.setItem(PENDING_INVITE_TOKEN_KEY, TOKEN);
     const { router } = renderJoin("");
-    expect(await screen.findByText("Sign in to join this group.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Sign in to join this group."),
+    ).toBeInTheDocument();
 
     setSession(exchangedSessionFixture.access_token, userFixture);
 

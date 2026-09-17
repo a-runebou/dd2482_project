@@ -464,7 +464,8 @@ export const handlers = [
     HttpResponse.json(calendarSources),
   ),
   http.post(mockUrl("/me/calendar-sources"), async ({ request }) => {
-    const body = (await request.json()) as components["schemas"]["CalendarSourceCreate"];
+    const body =
+      (await request.json()) as components["schemas"]["CalendarSourceCreate"];
     const source: components["schemas"]["CalendarSource"] = {
       ...calendarSourceFixture,
       id: "b6e1d1d0-1f0a-4a3b-8c2e-999999999999",
@@ -474,7 +475,10 @@ export const handlers = [
       status: "pending",
       event_count: 0,
     };
-    calendarSources = { data: [...calendarSources.data, source], next_cursor: null };
+    calendarSources = {
+      data: [...calendarSources.data, source],
+      next_cursor: null,
+    };
     return HttpResponse.json(source, { status: 201 });
   }),
   http.post(mockUrl("/me/calendar-sources/upload"), async ({ request }) => {
@@ -493,18 +497,25 @@ export const handlers = [
       status: "ok",
       event_count: 2,
     };
-    calendarSources = { data: [...calendarSources.data, source], next_cursor: null };
+    calendarSources = {
+      data: [...calendarSources.data, source],
+      next_cursor: null,
+    };
     return HttpResponse.json(source, { status: 201 });
   }),
   http.post(mockUrl("/me/calendar-sources/:sourceId/refresh"), ({ params }) => {
-    const source = calendarSources.data.find((item) => item.id === pathParam(params.sourceId));
+    const source = calendarSources.data.find(
+      (item) => item.id === pathParam(params.sourceId),
+    );
     return source === undefined
       ? problemResponse(notFoundProblem)
       : HttpResponse.json({ ...source, status: "pending" }, { status: 202 });
   }),
   http.delete(mockUrl("/me/calendar-sources/:sourceId"), ({ params }) => {
     calendarSources = {
-      data: calendarSources.data.filter((item) => item.id !== pathParam(params.sourceId)),
+      data: calendarSources.data.filter(
+        (item) => item.id !== pathParam(params.sourceId),
+      ),
       next_cursor: null,
     };
     return new HttpResponse(null, { status: 204 });

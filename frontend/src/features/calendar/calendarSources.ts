@@ -20,9 +20,7 @@ function invalidateSources(queryClient: QueryClient): Promise<void> {
   return queryClient.invalidateQueries({ queryKey: calendarSourcesKey });
 }
 
-export function createCalendarSourceMutationOptions(
-  queryClient: QueryClient,
-) {
+export function createCalendarSourceMutationOptions(queryClient: QueryClient) {
   return {
     mutationFn: (body: CalendarSourceCreate) =>
       unwrap<CalendarSource>(
@@ -35,9 +33,7 @@ export function createCalendarSourceMutationOptions(
   };
 }
 
-export function uploadCalendarSourceMutationOptions(
-  queryClient: QueryClient,
-) {
+export function uploadCalendarSourceMutationOptions(queryClient: QueryClient) {
   return {
     mutationFn: (file: File) =>
       unwrap<CalendarSource>(
@@ -50,9 +46,7 @@ export function uploadCalendarSourceMutationOptions(
   };
 }
 
-export function refreshCalendarSourceMutationOptions(
-  queryClient: QueryClient,
-) {
+export function refreshCalendarSourceMutationOptions(queryClient: QueryClient) {
   return {
     mutationFn: (sourceId: string) =>
       unwrap<CalendarSource>(
@@ -67,9 +61,7 @@ export function refreshCalendarSourceMutationOptions(
   };
 }
 
-export function deleteCalendarSourceMutationOptions(
-  queryClient: QueryClient,
-) {
+export function deleteCalendarSourceMutationOptions(queryClient: QueryClient) {
   return {
     mutationFn: (sourceId: string) =>
       unwrap<void>(

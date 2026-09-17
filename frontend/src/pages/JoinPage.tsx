@@ -20,11 +20,7 @@ function pendingInviteToken(): string | null {
   return isValidInviteToken(token) ? token : null;
 }
 
-export function JoinPage({
-  redirectPath,
-}: {
-  redirectPath?: string;
-}) {
+export function JoinPage({ redirectPath }: { redirectPath?: string }) {
   const { slug } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -35,9 +31,7 @@ export function JoinPage({
     : queryToken === null
       ? pendingInviteToken()
       : null;
-  const mutation = useMutation(
-    joinGroupMutationOptions(slug ?? ""),
-  );
+  const mutation = useMutation(joinGroupMutationOptions(slug ?? ""));
   const startedToken = useRef<string | null>(null);
 
   useEffect(() => {
@@ -86,9 +80,7 @@ export function JoinPage({
     return (
       <PageContainer>
         <PageHeading title="Join group" />
-        <p className="mt-4 text-neutral-600">
-          Sign in to join this group.
-        </p>
+        <p className="mt-4 text-neutral-600">Sign in to join this group.</p>
         <SignInForm redirectPath={redirectPath ?? `/join/${slug}`} />
       </PageContainer>
     );

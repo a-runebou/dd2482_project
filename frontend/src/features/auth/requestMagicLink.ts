@@ -10,7 +10,10 @@ export function requestMagicLinkMutationOptions(redirectPath = "/") {
     mutationFn: (email: string) =>
       unwrap<undefined>(
         apiClient.POST("/auth/magic-link", {
-          body: { email, redirect_path: redirectPath } satisfies MagicLinkRequest,
+          body: {
+            email,
+            redirect_path: redirectPath,
+          } satisfies MagicLinkRequest,
         }),
       ),
   };

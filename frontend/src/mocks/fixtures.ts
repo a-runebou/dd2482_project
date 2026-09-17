@@ -145,10 +145,11 @@ export const calendarSourceFixture: components["schemas"]["CalendarSource"] = {
   created_at: "2026-09-15T08:00:00Z",
 };
 
-export const calendarSourcesFixture: components["schemas"]["CalendarSourcePage"] = {
-  data: [calendarSourceFixture],
-  next_cursor: null,
-};
+export const calendarSourcesFixture: components["schemas"]["CalendarSourcePage"] =
+  {
+    data: [calendarSourceFixture],
+    next_cursor: null,
+  };
 
 export const calendarSourceLimitProblem: components["schemas"]["Problem"] = {
   type: "about:blank",
