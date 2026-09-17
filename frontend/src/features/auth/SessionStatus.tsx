@@ -34,6 +34,9 @@ export function SessionStatus() {
 
   return (
     <div className="flex items-center gap-3">
+      <Link className={LINK} to="/calendar-sources">
+        Calendars
+      </Link>
       <p className="text-sm text-neutral-600">{session.user.display_name}</p>
       <Button
         variant="quiet"

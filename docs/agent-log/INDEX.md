@@ -1,3 +1,4 @@
+2026-09-16 | single-origin-integration | GitHub Copilot | Integrated the frontend and backend through the local single-origin Compose topology and fixed magic-link redirect and invite-rotation blockers.
 # Agent log index
 
 2026-09-10 | api-type-generation | Haiku 4.5 | Added openapi-typescript to generate TypeScript types from the contract, with check:api verification script and Node 24 enforcement.
@@ -23,3 +24,4 @@
 2026-09-14 | suggestions-proposals | Opus 5 | Added the /groups/:slug/proposals route with ranked suggestions, owner-only proposal creation from a suggestion or by hand, and deletion; found a pre-existing typecheck failure in groupMutations.ts.
 2026-09-15 | votes-confirmation | Opus 5 | Added per-member voting, owner confirmation and unconfirmation, the confirmed freeze across the grid and proposals route including mid-edit under polling, and the iCalendar download and feed link; 390 tests became 430.
 2026-09-16 | voting-reachability-navigation | Sonnet 5 | Diagnosed the voting gate (already correctly split, but missing a my_role-presence check) and the fixture gap that hid it; added a shared GroupNav breadcrumb across the group, availability and proposals routes; 430 tests became 444.
+2026-09-16 | calendar-sources | GitHub Copilot | Added the authenticated calendar-source management page with URL add, ICS upload, refresh, delete, status/error states, navigation, MSW handlers and focused coverage; 454 frontend tests pass.

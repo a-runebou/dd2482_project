@@ -9,7 +9,9 @@ import { AvailabilityPage } from "../pages/AvailabilityPage";
 import { ProposalsPage } from "../pages/ProposalsPage";
 import { SignInPage } from "../pages/SignInPage";
 import { AuthCallbackPage } from "../pages/AuthCallbackPage";
+import { JoinPage } from "../pages/JoinPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
+import { CalendarSourcesPage } from "../pages/CalendarSourcesPage";
 
 /**
  * The single source of routes, consumed by the browser data router in main.tsx and by a memory
@@ -33,6 +35,8 @@ export const appRoutes: RouteObject[] = [
       { path: "groups/:slug/proposals", element: <ProposalsPage /> },
       { path: "sign-in", element: <SignInPage /> },
       { path: "auth/callback", element: <AuthCallbackPage /> },
+      { path: "join/:slug", element: <JoinPage /> },
+      { path: "calendar-sources", element: <CalendarSourcesPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],
   },

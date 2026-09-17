@@ -14,6 +14,8 @@ type Proposal = components["schemas"]["Proposal"];
 type Suggestion = components["schemas"]["Suggestion"];
 import {
   configFixture,
+  calendarSourceFixture,
+  calendarSourcesFixture,
   dstBusyFixture,
   dstParticipantsFixture,
   createdGroupFixture,
@@ -79,6 +81,12 @@ function problemResponse(problem: components["schemas"]["Problem"]) {
  */
 let groups: Record<string, Group> = { ...groupsBySlugFixture };
 let members: Record<string, MemberPage> = structuredClone(membersBySlugFixture);
+
+let calendarSources = structuredClone(calendarSourcesFixture);
+
+export function resetMockCalendarSources(): void {
+  calendarSources = structuredClone(calendarSourcesFixture);
+}
 
 export function resetMockGroups(): void {
   groups = { ...groupsBySlugFixture };
@@ -452,6 +460,55 @@ export const handlers = [
     refreshCookiePresent = false;
     return new HttpResponse(null, { status: 204 });
   }),
+  http.get(mockUrl("/me/calendar-sources"), () =>
+    HttpResponse.json(calendarSources),
+  ),
+  http.post(mockUrl("/me/calendar-sources"), async ({ request }) => {
+    const body = (await request.json()) as components["schemas"]["CalendarSourceCreate"];
+    const source: components["schemas"]["CalendarSource"] = {
+      ...calendarSourceFixture,
+      id: "b6e1d1d0-1f0a-4a3b-8c2e-999999999999",
+      kind: "url",
+      url: body.url,
+      label: body.label ?? null,
+      status: "pending",
+      event_count: 0,
+    };
+    calendarSources = { data: [...calendarSources.data, source], next_cursor: null };
+    return HttpResponse.json(source, { status: 201 });
+  }),
+  http.post(mockUrl("/me/calendar-sources/upload"), async ({ request }) => {
+    const form = await request.formData();
+    const file = form.get("file");
+    const fileName =
+      file !== null && typeof file !== "string" && "name" in file
+        ? String(file.name)
+        : "Uploaded calendar";
+    const source: components["schemas"]["CalendarSource"] = {
+      ...calendarSourceFixture,
+      id: "b6e1d1d0-1f0a-4a3b-8c2e-aaaaaaaaaaaa",
+      kind: "upload",
+      url: null,
+      label: fileName,
+      status: "ok",
+      event_count: 2,
+    };
+    calendarSources = { data: [...calendarSources.data, source], next_cursor: null };
+    return HttpResponse.json(source, { status: 201 });
+  }),
+  http.post(mockUrl("/me/calendar-sources/:sourceId/refresh"), ({ params }) => {
+    const source = calendarSources.data.find((item) => item.id === pathParam(params.sourceId));
+    return source === undefined
+      ? problemResponse(notFoundProblem)
+      : HttpResponse.json({ ...source, status: "pending" }, { status: 202 });
+  }),
+  http.delete(mockUrl("/me/calendar-sources/:sourceId"), ({ params }) => {
+    calendarSources = {
+      data: calendarSources.data.filter((item) => item.id !== pathParam(params.sourceId)),
+      next_cursor: null,
+    };
+    return new HttpResponse(null, { status: 204 });
+  }),
   // --- Group detail ---------------------------------------------------------------------
   // A read always carries the ETag, because every mutation below insists on a matching
   // If-Match when the client sends one. Unknown slugs are 404 group_not_found, which is also
@@ -466,6 +523,12 @@ export const handlers = [
       unchanged ??
       HttpResponse.json(group, { headers: { ETag: groupEtag(group) } })
     );
+  }),
+  http.post(mockUrl("/groups/:slug/join"), ({ params }) => {
+    const group = groups[pathParam(params.slug)];
+    return group === undefined
+      ? problemResponse(groupNotFoundProblem)
+      : HttpResponse.json(group);
   }),
   http.get(mockUrl("/groups/:slug/members"), ({ params }) => {
     const roster = members[pathParam(params.slug)];
