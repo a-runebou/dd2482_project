@@ -11,6 +11,7 @@ import type { components } from "../../api/generated/schema";
 
 interface Attempt {
   email: string;
+  redirect_path?: string;
 }
 
 let attempts: Attempt[];
@@ -20,8 +21,11 @@ function postMagicLink(
   respond: (attempt: Attempt) => Response | Promise<Response>,
 ) {
   return http.post(mockUrl("/auth/magic-link"), async ({ request }) => {
-    const body = (await request.clone().json()) as { email: string };
-    const attempt: Attempt = { email: body.email };
+    const body = (await request.clone().json()) as Attempt;
+    const attempt: Attempt = {
+      email: body.email,
+      redirect_path: body.redirect_path,
+    };
     attempts.push(attempt);
     return respond(attempt);
   });
@@ -71,7 +75,7 @@ describe("SignInForm", () => {
     vi.restoreAllMocks();
   });
 
-  it("sends exactly { email } and shows the confirmation without the address", async () => {
+  it("sends email and redirect_path and shows the confirmation without the address", async () => {
     server.use(postMagicLink(() => new HttpResponse(null, { status: 202 })));
 
     renderForm();
@@ -83,7 +87,10 @@ describe("SignInForm", () => {
     ).toBeInTheDocument();
 
     expect(attempts).toHaveLength(1);
-    expect(attempts[0]).toEqual({ email: "nobody@example.com" });
+    expect(attempts[0]).toEqual({
+      email: "nobody@example.com",
+      redirect_path: "/",
+    });
 
     expect(screen.queryByText("nobody@example.com")).not.toBeInTheDocument();
     expect(

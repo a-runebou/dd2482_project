@@ -156,6 +156,10 @@ class GroupResponse(BaseModel):
     updated_at: datetime
 
 
+class GroupPatched(GroupResponse):
+    invite_url: str | None = None
+
+
 class GroupWithInviteResponse(GroupResponse):
     invite_url: str
 

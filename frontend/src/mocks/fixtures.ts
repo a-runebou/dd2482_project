@@ -133,6 +133,45 @@ export const validationFailedProblem: components["schemas"]["Problem"] = {
   code: "validation_failed",
 };
 
+export const calendarSourceFixture: components["schemas"]["CalendarSource"] = {
+  id: "b6e1d1d0-1f0a-4a3b-8c2e-888888888888",
+  kind: "url",
+  url: "https://example.com/schedule.ics",
+  label: "KTH schedule",
+  status: "ok",
+  last_polled_at: "2026-09-16T08:00:00Z",
+  last_error_code: null,
+  event_count: 4,
+  created_at: "2026-09-15T08:00:00Z",
+};
+
+export const calendarSourcesFixture: components["schemas"]["CalendarSourcePage"] =
+  {
+    data: [calendarSourceFixture],
+    next_cursor: null,
+  };
+
+export const calendarSourceLimitProblem: components["schemas"]["Problem"] = {
+  type: "about:blank",
+  title: "Calendar source limit reached",
+  status: 409,
+  code: "calendar_source_limit_reached",
+};
+
+export const icsParseFailedProblem: components["schemas"]["Problem"] = {
+  type: "about:blank",
+  title: "Calendar could not be parsed",
+  status: 422,
+  code: "ics_parse_failed",
+};
+
+export const rateLimitedProblem: components["schemas"]["Problem"] = {
+  type: "about:blank",
+  title: "Refresh rate limited",
+  status: 429,
+  code: "rate_limited",
+};
+
 // The group POST /groups invents. Slug matches the contract's base58 pattern; the invite token
 // is 32 characters, the shortest the task allows, so a test asserting a minimum is meaningful.
 export const createdGroupSlug = "5kW8rFj4Qz7X";
@@ -311,6 +350,14 @@ export const groupNotFoundProblem: components["schemas"]["Problem"] = {
   status: 404,
   detail: "No such group.",
   code: "group_not_found",
+};
+
+export const alreadyMemberProblem: components["schemas"]["Problem"] = {
+  type: "about:blank",
+  title: "Already a member",
+  status: 409,
+  detail: "Already a member.",
+  code: "already_member",
 };
 
 export const notFoundProblem: components["schemas"]["Problem"] = {
