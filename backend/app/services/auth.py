@@ -160,6 +160,34 @@ def refresh_session(
         raise InvalidRefreshToken
 
     if stored_token.revoked_at is not None:
+        family_tokens = db.scalars(
+            select(RefreshToken).where(
+                RefreshToken.family_id == stored_token.family_id,
+            )
+        ).all()
+
+        latest_revoked_token = max(
+            (
+                token
+                for token in family_tokens
+                if token.revoked_at is not None
+            ),
+            key=lambda token: token.revoked_at
+            or datetime.min.replace(tzinfo=UTC),
+        )
+        has_active_successor = any(
+            token.revoked_at is None
+            for token in family_tokens
+        )
+
+        if (
+            latest_revoked_token.id == stored_token.id
+            and has_active_successor
+            and now - stored_token.revoked_at
+            <= timedelta(seconds=settings.refresh_token_grace_seconds)
+        ):
+            raise InvalidRefreshToken
+
         db.execute(
             update(RefreshToken)
             .where(
@@ -210,7 +238,7 @@ def logout_session(
     raw_token: str | None,
 ) -> None:
     if raw_token is None:
-        return
+        raise InvalidRefreshToken
 
     token_hash = hash_token(raw_token)
 
@@ -221,7 +249,7 @@ def logout_session(
     )
 
     if stored_token is None:
-        return
+        raise InvalidRefreshToken
 
     now = datetime.now(UTC)
 

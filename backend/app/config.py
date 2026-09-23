@@ -47,6 +47,7 @@ class Settings:
 
     access_token_ttl_seconds: int = 900
     refresh_token_ttl_days: int = 30
+    refresh_token_grace_seconds: int = 30
     magic_link_ttl_seconds: int = 900
 
 
@@ -83,5 +84,8 @@ def get_settings() -> Settings:
         ),
         ops_alert_email=os.getenv(
             "OPS_ALERT_EMAIL",
+        ),
+        refresh_token_grace_seconds=int(
+            os.getenv("REFRESH_TOKEN_GRACE_SECONDS", "30")
         ),
     )

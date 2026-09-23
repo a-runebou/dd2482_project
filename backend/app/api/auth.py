@@ -152,10 +152,17 @@ def delete_session(
     refresh_token: str | None = Cookie(default=None),
     db: Session = Depends(get_db),
 ) -> Response:
-    logout_session(
-        db=db,
-        raw_token=refresh_token,
-    )
+    try:
+        logout_session(
+            db=db,
+            raw_token=refresh_token,
+        )
+    except InvalidRefreshToken as exc:
+        raise ProblemException(
+            status_code=401,
+            code="unauthenticated",
+            title="Unauthenticated",
+        ) from exc
 
     response.delete_cookie(
         key="refresh_token",

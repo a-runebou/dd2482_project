@@ -16,6 +16,7 @@ from app.infra.models.scheduling import Proposal
 from app.services.groups import (
     GroupView,
     NotOwner,
+    bump_group_version,
     get_group_view,
 )
 from app.services.proposals import (
@@ -69,8 +70,7 @@ def confirm_group(
 
     group.state = GroupState.CONFIRMED
     group.confirmed_proposal_id = proposal.id
-    group.version += 1
-    group.updated_at = now
+    bump_group_version(group, now=now)
 
     if send_reminders:
         memberships = db.scalars(
@@ -147,8 +147,7 @@ def unconfirm_group(
 
     group.state = GroupState.OPEN
     group.confirmed_proposal_id = None
-    group.version += 1
-    group.updated_at = datetime.now(UTC)
+    bump_group_version(group)
 
     db.commit()
     db.refresh(group)

@@ -25,6 +25,7 @@ from app.infra.models.scheduling import (
 from app.services.groups import (
     GroupView,
     NotOwner,
+    bump_group_version,
     get_group_view,
 )
 
@@ -225,8 +226,7 @@ def create_proposal(
 
     db.add(proposal)
 
-    group.version += 1
-    group.updated_at = datetime.now(UTC)
+    bump_group_version(group)
 
     db.commit()
     db.refresh(proposal)
@@ -269,8 +269,7 @@ def delete_proposal(
 
     db.delete(proposal)
 
-    view.group.version += 1
-    view.group.updated_at = datetime.now(UTC)
+    bump_group_version(view.group)
 
     db.commit()
 
@@ -343,8 +342,7 @@ def put_vote(
     else:
         vote.value = value
 
-    group_view.group.version += 1
-    group_view.group.updated_at = datetime.now(UTC)
+    bump_group_version(group_view.group)
 
     db.commit()
 
@@ -382,7 +380,6 @@ def delete_vote(
     if vote is not None:
         db.delete(vote)
 
-        group_view.group.version += 1
-        group_view.group.updated_at = datetime.now(UTC)
+        bump_group_version(group_view.group)
 
         db.commit()

@@ -1,5 +1,7 @@
 import hashlib
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
+from typing import cast
 from uuid import UUID
 
 from fastapi import Request, Response
@@ -7,10 +9,9 @@ from starlette.middleware.base import (
     BaseHTTPMiddleware,
     RequestResponseEndpoint,
 )
-from starlette.responses import StreamingResponse
 
 from app.api.errors import problem_response
-from app.infra.db import SessionLocal
+from app.infra.db import guarded_session
 from app.infra.models.idempotency import IdempotencyRecord
 
 IDEMPOTENCY_TTL = timedelta(hours=24)
@@ -59,10 +60,17 @@ def replay_response(
 async def read_response_body(
     response: Response,
 ) -> bytes:
-    if isinstance(response, StreamingResponse):
+    body_iterator = getattr(response, "body_iterator", None)
+
+    if body_iterator is not None:
         chunks: list[bytes] = []
 
-        async for chunk in response.body_iterator:
+        iterator = cast(
+            AsyncIterator[bytes | str | memoryview],
+            body_iterator,
+        )
+
+        async for chunk in iterator:
             if isinstance(chunk, str):
                 chunks.append(chunk.encode())
             elif isinstance(chunk, memoryview):
@@ -72,12 +80,18 @@ async def read_response_body(
 
         return b"".join(chunks)
 
-    body = response.body
+    body: object = getattr(response, "body", None)
+
+    if body is None:
+        raise TypeError("Response does not expose a readable body")
 
     if isinstance(body, memoryview):
         return body.tobytes()
 
-    return body
+    if isinstance(body, bytes):
+        return body
+
+    raise TypeError("Response body is not bytes")
 
 
 class IdempotencyMiddleware(BaseHTTPMiddleware):
@@ -89,7 +103,9 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         if request.method not in MUTATING_METHODS:
             return await call_next(request)
 
-        raw_key = request.headers.get("Idempotency-Key")
+        raw_key = request.headers.get(
+            "Idempotency-Key"
+        )
 
         if raw_key is None:
             return await call_next(request)
@@ -102,7 +118,9 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                 status_code=400,
                 code="validation_failed",
                 title="Invalid Idempotency-Key",
-                detail=("Idempotency-Key must be a UUID."),
+                detail=(
+                    "Idempotency-Key must be a UUID."
+                ),
             )
 
         body = await request.body()
@@ -110,13 +128,17 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
 
         now = datetime.now(UTC)
 
-        with SessionLocal() as db:
+        with guarded_session() as db:
             record = db.get(
                 IdempotencyRecord,
                 key,
             )
 
-            if record is not None and now - record.created_at > IDEMPOTENCY_TTL:
+            if (
+                record is not None
+                and now - record.created_at
+                > IDEMPOTENCY_TTL
+            ):
                 db.delete(record)
                 db.commit()
                 record = None
@@ -144,16 +166,20 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
 
         response = await call_next(request)
 
-        response_body = await read_response_body(response)
+        response_body = await read_response_body(
+            response
+        )
 
         response_headers = {
             header_name.lower(): header_value
-            for header_name, header_value in response.headers.items()
-            if header_name.lower() not in IGNORED_RESPONSE_HEADERS
+            for header_name, header_value
+            in response.headers.items()
+            if header_name.lower()
+            not in IGNORED_RESPONSE_HEADERS
         }
 
         if response.status_code < 500:
-            with SessionLocal() as db:
+            with guarded_session() as db:
                 db.add(
                     IdempotencyRecord(
                         key=key,

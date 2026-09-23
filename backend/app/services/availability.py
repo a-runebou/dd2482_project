@@ -20,7 +20,7 @@ from app.infra.models.scheduling import (
     AvailabilityState,
 )
 from app.infra.models.user import User
-from app.services.groups import GroupNotFound
+from app.services.groups import GroupNotFound, bump_group_version
 
 
 class GroupConfirmed(Exception):
@@ -183,8 +183,7 @@ def put_my_availability(
 
     membership.availability_submitted_at = now
 
-    group.version += 1
-    group.updated_at = now
+    bump_group_version(group, now=now)
 
     db.commit()
 

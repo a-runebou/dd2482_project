@@ -10,6 +10,7 @@ from app.api.errors import (
     circuit_open_exception_handler,
     http_exception_handler,
     problem_exception_handler,
+    unhandled_exception_handler,
     validation_exception_handler,
 )
 from app.api.idempotency import IdempotencyMiddleware
@@ -53,6 +54,11 @@ app.add_exception_handler(
 app.add_exception_handler(
     CircuitOpenError,
     cast(ExceptionHandler, circuit_open_exception_handler),
+)
+
+app.add_exception_handler(
+    Exception,
+    cast(ExceptionHandler, unhandled_exception_handler),
 )
 
 
