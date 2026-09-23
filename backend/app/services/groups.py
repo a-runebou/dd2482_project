@@ -46,6 +46,7 @@ class GroupView:
     group: Group
     member_count: int
     my_role: MembershipRole
+    rotated_invite_token: str | None = None
 
 
 def etag_for(version: int) -> str:
@@ -334,8 +335,11 @@ def update_group(
     group.window_start_minute = window_start_minute
     group.window_end_minute = window_end_minute
 
+    rotated_invite_token: str | None = None
+
     if changes.get("rotate_invite_token") is True:
-        group.invite_token_hash = hash_token(generate_token())
+        rotated_invite_token = generate_token()
+        group.invite_token_hash = hash_token(rotated_invite_token)
 
     if changes.get("rotate_feed_token") is True:
         group.feed_token_hash = hash_token(generate_token())
@@ -370,6 +374,7 @@ def update_group(
         group=group,
         member_count=_member_count(db, group.id),
         my_role=MembershipRole.OWNER,
+        rotated_invite_token=rotated_invite_token,
     )
 
 

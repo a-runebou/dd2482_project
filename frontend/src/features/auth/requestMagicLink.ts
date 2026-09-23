@@ -4,17 +4,16 @@ import type { components } from "../../api/generated/schema";
 
 type MagicLinkRequest = components["schemas"]["MagicLinkRequest"];
 
-/**
- * POST /auth/magic-link, sending only email. redirect_path is not sent: how the user returns
- * after signing in is unsettled (item C2 of docs/coordination/frontend-backend.md). There is no
- * session yet, so no query is invalidated on success.
- */
-export function requestMagicLinkMutationOptions() {
+/** POST /auth/magic-link. There is no session yet, so no query is invalidated on success. */
+export function requestMagicLinkMutationOptions(redirectPath = "/") {
   return {
     mutationFn: (email: string) =>
       unwrap<undefined>(
         apiClient.POST("/auth/magic-link", {
-          body: { email } satisfies MagicLinkRequest,
+          body: {
+            email,
+            redirect_path: redirectPath,
+          } satisfies MagicLinkRequest,
         }),
       ),
   };

@@ -1,5 +1,7 @@
 import hashlib
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
+from typing import cast
 from uuid import UUID
 
 from fastapi import Request, Response
@@ -7,7 +9,6 @@ from starlette.middleware.base import (
     BaseHTTPMiddleware,
     RequestResponseEndpoint,
 )
-from starlette.responses import StreamingResponse
 
 from app.api.errors import problem_response
 from app.infra.db import guarded_session
@@ -59,10 +60,17 @@ def replay_response(
 async def read_response_body(
     response: Response,
 ) -> bytes:
-    if isinstance(response, StreamingResponse):
+    body_iterator = getattr(response, "body_iterator", None)
+
+    if body_iterator is not None:
         chunks: list[bytes] = []
 
-        async for chunk in response.body_iterator:
+        iterator = cast(
+            AsyncIterator[bytes | str | memoryview],
+            body_iterator,
+        )
+
+        async for chunk in iterator:
             if isinstance(chunk, str):
                 chunks.append(chunk.encode())
             elif isinstance(chunk, memoryview):
@@ -72,12 +80,18 @@ async def read_response_body(
 
         return b"".join(chunks)
 
-    body = response.body
+    body: object = getattr(response, "body", None)
+
+    if body is None:
+        raise TypeError("Response does not expose a readable body")
 
     if isinstance(body, memoryview):
         return body.tobytes()
 
-    return body
+    if isinstance(body, bytes):
+        return body
+
+    raise TypeError("Response body is not bytes")
 
 
 class IdempotencyMiddleware(BaseHTTPMiddleware):

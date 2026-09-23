@@ -93,8 +93,12 @@ function Confirmation({
   );
 }
 
-export function SignInForm() {
-  const mutation = useMutation(requestMagicLinkMutationOptions());
+export function SignInForm({ redirectPath }: { redirectPath?: string }) {
+  const mutation = useMutation(
+    requestMagicLinkMutationOptions(
+      redirectPath ?? globalThis.location.pathname,
+    ),
+  );
 
   const [email, setEmail] = useState("");
   const [uxError, setUxError] = useState<string | undefined>(undefined);
