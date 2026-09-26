@@ -1,6 +1,7 @@
 name: build-images
 
 on:
+  # Final automatic path once this workflow exists on the default branch.
   workflow_run:
     workflows:
       - "ci"
@@ -8,15 +9,18 @@ on:
       - completed
     branches:
       - develop
-      - feat/dev-deployment
 
+  # TEMPORARY: allows us to test build -> deploy from the feature branch.
+  # Remove this trigger after the deployment pipeline has been merged.
   push:
     branches:
       - feat/dev-deployment
     paths:
       - "backend/**"
       - "frontend/**"
-      - ".github/workflows/build-images.yml"
+      - "contracts/**"
+      - "infra/compose/**"
+      - ".github/workflows/**"
 
   workflow_dispatch:
 
@@ -38,8 +42,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
+    outputs:
+      image_tag: ${{ steps.commit.outputs.sha }}
+
     steps:
-      # Determine the exact commit that passed CI.
       - name: Determine commit SHA
         id: commit
         env:
@@ -123,3 +129,11 @@ jobs:
           labels: ${{ steps.frontend-meta.outputs.labels }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
+
+  deploy:
+    needs: publish
+
+    uses: ./.github/workflows/deploy-dev.yml
+
+    with:
+      image_tag: ${{ needs.publish.outputs.image_tag }}

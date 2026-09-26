@@ -1,10 +1,17 @@
 name: deploy-dev
 
 on:
+  workflow_call:
+    inputs:
+      image_tag:
+        description: "Docker image tag to deploy"
+        required: true
+        type: string
+
   workflow_dispatch:
     inputs:
       image_tag:
-        description: "Docker image SHA to deploy"
+        description: "Docker image tag to deploy"
         required: true
         type: string
 
@@ -26,8 +33,10 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - name: Checkout repository
+      - name: Checkout deployed commit
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.image_tag }}
 
       - name: Pull deployment images
         env:
@@ -70,4 +79,3 @@ jobs:
 
           echo "Deployment smoke test failed"
           exit 1
-
