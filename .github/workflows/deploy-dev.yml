@@ -1,0 +1,73 @@
+name: deploy-dev
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Docker image SHA to deploy"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on:
+      - self-hosted
+      - Linux
+      - ARM64
+      - dev-deployment
+
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Pull deployment images
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          docker compose \
+            --env-file "$HOME/.config/schedular/.env.deploy" \
+            -f infra/compose/docker-compose.deploy.yml \
+            pull
+
+      - name: Deploy
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          docker compose \
+            --env-file "$HOME/.config/schedular/.env.deploy" \
+            -f infra/compose/docker-compose.deploy.yml \
+            up -d
+
+      - name: Show deployment status
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          docker compose \
+            --env-file "$HOME/.config/schedular/.env.deploy" \
+            -f infra/compose/docker-compose.deploy.yml \
+            ps -a
+
+      - name: Smoke test
+        run: |
+          for i in {1..12}; do
+            if curl --fail --silent http://localhost:8080/ > /dev/null; then
+              echo "Deployment smoke test passed"
+              exit 0
+            fi
+
+            echo "Waiting for application..."
+            sleep 5
+          done
+
+          echo "Deployment smoke test failed"
+          exit 1
+

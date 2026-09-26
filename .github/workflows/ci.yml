@@ -35,3 +35,19 @@ jobs:
 
   frontend:
     uses: ./.github/workflows/frontend-ci.yml
+
+  test-pi-runner:
+    runs-on:
+      - self-hosted
+      - Linux
+      - ARM64
+      - dev-deployment
+
+    steps:
+      - name: Test Raspberry Pi runner
+        run: |
+          echo "Hello from Raspberry Pi"
+          hostname
+          uname -m
+          docker --version
+          docker compose version
