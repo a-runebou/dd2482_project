@@ -1,0 +1,37 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - develop
+      - feat/dev-deployment
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "contracts/**"
+      - "infra/compose/**"
+      - ".github/workflows/**"
+
+  pull_request:
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "contracts/**"
+      - "infra/compose/**"
+      - ".github/workflows/**"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  backend:
+    uses: ./.github/workflows/backend-ci.yml
+
+  frontend:
+    uses: ./.github/workflows/frontend-ci.yml

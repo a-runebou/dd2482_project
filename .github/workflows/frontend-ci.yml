@@ -1,27 +1,11 @@
 name: frontend-ci
 
 on:
-  pull_request:
-    paths:
-      - "frontend/**"
-      - "contracts/openapi.yaml"
-      - ".github/workflows/frontend-ci.yml"
-  push:
-    branches:
-      - main
-      - develop
-    paths:
-      - "frontend/**"
-      - "contracts/openapi.yaml"
-      - ".github/workflows/frontend-ci.yml"
+  workflow_call:
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   frontend-lint:
