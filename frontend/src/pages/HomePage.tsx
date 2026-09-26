@@ -8,7 +8,7 @@ export function HomePage() {
     <PageContainer>
       <PageHeading title="Schedular" />
       <Link className={`mt-6 inline-block ${LINK}`} to="/groups">
-        Your groups
+        Your groups!!!
       </Link>
     </PageContainer>
   );
