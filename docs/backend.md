@@ -434,6 +434,21 @@ The current migration directory contains six revision files:
 The first item creates the core schema and the remaining revisions extend it. Always inspect
 `alembic heads` rather than relying on a copied revision list when diagnosing a database.
 
+### Deployment migration compatibility
+
+The development deployment runs migrations before starting the API and worker. The deployment
+workflow first checks that the last-known-good backend image can read the current database
+revision, then renders the candidate image's migration SQL without applying it. A migration
+failure is reported and prevents the application services from being considered deployed.
+
+Automatic application rollback never runs `alembic downgrade`: downgrades may be destructive and
+can lose data. Therefore every deployment migration must remain backward-compatible with the
+last-known-good application. Use an expand/contract sequence: first add nullable columns, new
+tables, indexes, or dual-write paths while the old application still works; deploy code that
+uses the new shape; and only in a later deployment remove old columns or constraints after no
+rollback to the old application is needed. The preflight checks migration visibility and SQL
+rendering, but human review and tests are still required for application-level compatibility.
+
 ### Fresh database initialization
 
 A fresh local database is initialized by the Compose `migrate` service. Its command is:

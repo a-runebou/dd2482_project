@@ -67,25 +67,73 @@ jobs:
             -f infra/compose/docker-compose.deploy.yml \
             pull
 
-      - name: Deploy
+      - name: Start migration dependencies
         env:
           IMAGE_TAG: ${{ inputs.image_tag }}
         run: |
           docker compose \
             --env-file "$HOME/.config/schedular/.env.deploy" \
             -f infra/compose/docker-compose.deploy.yml \
-            up -d
+            up -d postgres mailpit
 
-      - name: Show deployment status
+      - name: Preflight migration 
+        env:
+          CANDIDATE_IMAGE_TAG: ${{ inputs.image_tag }}
+          LAST_KNOWN_GOOD_IMAGE_TAG: ${{ steps.known_good.outputs.image_tag }}
+        run: |
+          compose() {
+            docker compose \
+              --env-file "$HOME/.config/schedular/.env.deploy" \
+              -f infra/compose/docker-compose.deploy.yml \
+              "$@"
+          }
+
+          echo "Checking that the last-known-good image understands the current database revision"
+          if ! IMAGE_TAG="$LAST_KNOWN_GOOD_IMAGE_TAG" compose pull migrate; then
+            echo "Migration preflight check failed: could not pull the last-known-good image"
+            exit 1
+          fi
+          if ! IMAGE_TAG="$LAST_KNOWN_GOOD_IMAGE_TAG" compose run --rm --no-deps migrate alembic current; then
+            echo "Migration preflight check failed: the last-known-good image cannot read the current database revision"
+            exit 1
+          fi
+
+          echo "Rendering candidate migrations without applying them"
+          if ! IMAGE_TAG="$CANDIDATE_IMAGE_TAG" compose run --rm --no-deps migrate alembic upgrade head --sql > migration-preflight.sql; then
+            echo "Migration preflight failed: candidate migrations could not be rendered"
+            exit 1
+          fi
+          echo "Migration preflight passed; no migration was applied by this check"
+          rm -f migration-preflight.sql
+
+      - name: Deploy
+        id: deploy
+        continue-on-error: true
         env:
           IMAGE_TAG: ${{ inputs.image_tag }}
         run: |
-          docker compose \
+          if ! docker compose \
+            --env-file "$HOME/.config/schedular/.env.deploy" \
+            -f infra/compose/docker-compose.deploy.yml \
+            up -d; then
+            echo "Deployment migration or service startup failed"
+            exit 1
+          fi
+          echo "Deployment migration and service startup completed"
+
+      - name: Show deployment status
+        if: always()
+        continue-on-error: true
+        env:
+            IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+            docker compose \
             --env-file "$HOME/.config/schedular/.env.deploy" \
             -f infra/compose/docker-compose.deploy.yml \
             ps -a
 
       - name: Check backend readiness
+        if: steps.deploy.outcome == 'success'
         id: readiness
         continue-on-error: true
         run: |
@@ -112,7 +160,7 @@ jobs:
           exit 1
 
       - name: Record successful deployment
-        if: steps.readiness.outcome == 'success'
+        if: steps.deploy.outcome == 'success' && steps.readiness.outcome == 'success'
         env:
           IMAGE_TAG: ${{ inputs.image_tag }}
         run: |
@@ -124,7 +172,7 @@ jobs:
           echo "Recorded last-known-good image tag: $IMAGE_TAG"
 
       - name: Restart last known-good deployment
-        if: always() && steps.readiness.outcome == 'failure'
+        if: always() && (steps.deploy.outcome == 'failure' || steps.readiness.outcome == 'failure')
         id: rollback_deploy
         continue-on-error: true
         env:
@@ -146,7 +194,7 @@ jobs:
           echo "Rollback restart completed"
 
       - name: Check rollback readiness
-        if: always() && steps.readiness.outcome == 'failure'
+        if: always() && steps.rollback_deploy.outcome == 'success'
         id: rollback_readiness
         continue-on-error: true
         run: |
@@ -173,7 +221,7 @@ jobs:
           exit 1
 
       - name: Report deployment and rollback outcome
-        if: always() && steps.readiness.outcome == 'failure'
+        if: always() && (steps.deploy.outcome == 'failure' || steps.readiness.outcome == 'failure')
         env:
           ROLLBACK_DEPLOY_OUTCOME: ${{ steps.rollback_deploy.outcome }}
           ROLLBACK_READINESS_OUTCOME: ${{ steps.rollback_readiness.outcome }}
