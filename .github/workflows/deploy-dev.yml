@@ -37,6 +37,26 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: ${{ inputs.image_tag }}
+          fetch-depth: 1
+
+      - name: Read last known-good deployment
+        id: known_good
+        run: |
+          state_file="$HOME/.config/schedular/last-known-good-image-tag"
+          if [[ ! -s "$state_file" ]]; then
+            echo "No last-known-good deployment recorded at $state_file"
+            echo "Seed this file with a known-good image tag before the first deployment"
+            exit 1
+          fi
+
+          image_tag=$(tr -d '[:space:]' < "$state_file")
+          if [[ -z "$image_tag" || ! "$image_tag" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+            echo "Invalid last-known-good image tag in $state_file"
+            exit 1
+          fi
+
+          echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
+          echo "Last known-good image tag: $image_tag"
 
       - name: Pull deployment images
         env:
@@ -65,17 +85,103 @@ jobs:
             -f infra/compose/docker-compose.deploy.yml \
             ps -a
 
-      - name: Smoke test
+      - name: Check backend readiness
+        id: readiness
+        continue-on-error: true
         run: |
-          for i in {1..12}; do
-            if curl --fail --silent http://localhost:8080/ > /dev/null; then
-              echo "Deployment smoke test passed"
+          compose() {
+            docker compose \
+              --env-file "$HOME/.config/schedular/.env.deploy" \
+              -f infra/compose/docker-compose.deploy.yml \
+              "$@"
+          }
+
+          for attempt in {1..12}; do
+            echo "Readiness check $attempt/12: checking backend /readyz"
+            if compose exec -T backend python -c \
+              'import urllib.request; response = urllib.request.urlopen("http://127.0.0.1:8000/readyz", timeout=3); print(response.status); raise SystemExit(response.status != 200)'; then
+              echo "Backend /readyz is healthy"
               exit 0
             fi
 
-            echo "Waiting for application..."
+            echo "Backend is not ready; waiting 5 seconds"
             sleep 5
           done
 
-          echo "Deployment smoke test failed"
+          echo "Circuit breaker activated: backend did not become ready within 60 seconds"
+          exit 1
+
+      - name: Record successful deployment
+        if: steps.readiness.outcome == 'success'
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          state_dir="$HOME/.config/schedular"
+          state_file="$state_dir/last-known-good-image-tag"
+          mkdir -p "$state_dir"
+          printf '%s\n' "$IMAGE_TAG" > "$state_file.tmp"
+          mv "$state_file.tmp" "$state_file"
+          echo "Recorded last-known-good image tag: $IMAGE_TAG"
+
+      - name: Restart last known-good deployment
+        if: always() && steps.readiness.outcome == 'failure'
+        id: rollback_deploy
+        continue-on-error: true
+        env:
+          IMAGE_TAG: ${{ steps.known_good.outputs.image_tag }}
+        run: |
+          echo "Circuit breaker rollback: restoring image tag $IMAGE_TAG"
+          docker compose \
+            --env-file "$HOME/.config/schedular/.env.deploy" \
+            -f infra/compose/docker-compose.deploy.yml \
+            pull
+          docker compose \
+            --env-file "$HOME/.config/schedular/.env.deploy" \
+            -f infra/compose/docker-compose.deploy.yml \
+            up -d
+          docker compose \
+            --env-file "$HOME/.config/schedular/.env.deploy" \
+            -f infra/compose/docker-compose.deploy.yml \
+            ps -a
+          echo "Rollback restart completed"
+
+      - name: Check rollback readiness
+        if: always() && steps.readiness.outcome == 'failure'
+        id: rollback_readiness
+        continue-on-error: true
+        run: |
+          compose() {
+            docker compose \
+              --env-file "$HOME/.config/schedular/.env.deploy" \
+              -f infra/compose/docker-compose.deploy.yml \
+              "$@"
+          }
+
+          for attempt in {1..12}; do
+            echo "Rollback readiness check $attempt/12: checking backend /readyz"
+            if compose exec -T backend python -c \
+              'import urllib.request; response = urllib.request.urlopen("http://127.0.0.1:8000/readyz", timeout=3); print(response.status); raise SystemExit(response.status != 200)'; then
+              echo "Rollback /readyz is healthy"
+              exit 0
+            fi
+
+            echo "Rollback backend is not ready; waiting 5 seconds"
+            sleep 5
+          done
+
+          echo "Rollback readiness check failed after 60 seconds"
+          exit 1
+
+      - name: Report deployment and rollback outcome
+        if: always() && steps.readiness.outcome == 'failure'
+        env:
+          ROLLBACK_DEPLOY_OUTCOME: ${{ steps.rollback_deploy.outcome }}
+          ROLLBACK_READINESS_OUTCOME: ${{ steps.rollback_readiness.outcome }}
+        run: |
+          if [[ "$ROLLBACK_DEPLOY_OUTCOME" == "success" && "$ROLLBACK_READINESS_OUTCOME" == "success" ]]; then
+            echo "Deployment failed but rollback succeeded"
+          else
+            echo "Deployment failed and rollback also failed"
+          fi
+
           exit 1
