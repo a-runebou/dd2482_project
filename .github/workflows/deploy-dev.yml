@@ -7,11 +7,6 @@ on:
         description: "Docker image tag to deploy"
         required: true
         type: string
-      simulate_migration_failure:
-        description: "Intentionally fail the candidate migration after preflight"
-        required: false
-        default: false
-        type: boolean
 
   workflow_dispatch:
     inputs:
@@ -19,11 +14,6 @@ on:
         description: "Docker image tag to deploy"
         required: true
         type: string
-      simulate_migration_failure:
-        description: "Intentionally fail the candidate migration after preflight"
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -121,7 +111,6 @@ jobs:
         continue-on-error: true
         env:
           IMAGE_TAG: ${{ inputs.image_tag }}
-          SCHEDULAR_TEST_MIGRATION_FAILURE: ${{ inputs.simulate_migration_failure }}
         run: |
           if ! docker compose \
             --env-file "$HOME/.config/schedular/.env.deploy" \

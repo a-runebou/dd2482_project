@@ -6,7 +6,6 @@ Create Date: 2026-09-27 00:00:00.000000
 
 """
 
-import os
 from collections.abc import Sequence
 
 from alembic import op
@@ -19,8 +18,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    if os.getenv("SCHEDULAR_TEST_MIGRATION_FAILURE") == "true":
-        op.execute("THIS IS INTENTIONALLY INVALID SQL")
+    pass
 
 
 def downgrade() -> None:

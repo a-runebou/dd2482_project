@@ -137,4 +137,3 @@ jobs:
 
     with:
       image_tag: ${{ needs.publish.outputs.image_tag }}
-      simulate_migration_failure: true
