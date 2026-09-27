@@ -71,8 +71,13 @@ def healthz() -> dict[str, str]:
 def readyz(
     response: Response,
 ) -> dict[str, str]:
-    response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    if not database_ready():
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+
+        return {
+            "status": "not_ready",
+        }
 
     return {
-        "status": "not_ready",
+        "status": "ready",
     }
