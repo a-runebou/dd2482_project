@@ -7,6 +7,11 @@ on:
         description: "Docker image tag to deploy"
         required: true
         type: string
+      simulate_migration_failure:
+        description: "Intentionally fail the candidate migration after preflight"
+        required: false
+        default: false
+        type: boolean
 
   workflow_dispatch:
     inputs:
@@ -14,6 +19,11 @@ on:
         description: "Docker image tag to deploy"
         required: true
         type: string
+      simulate_migration_failure:
+        description: "Intentionally fail the candidate migration after preflight"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -111,11 +121,12 @@ jobs:
         continue-on-error: true
         env:
           IMAGE_TAG: ${{ inputs.image_tag }}
+          SCHEDULAR_TEST_MIGRATION_FAILURE: ${{ inputs.simulate_migration_failure }}
         run: |
           if ! docker compose \
             --env-file "$HOME/.config/schedular/.env.deploy" \
             -f infra/compose/docker-compose.deploy.yml \
-            up -d; then
+            up -d --wait --wait-timeout 300; then
             echo "Deployment migration or service startup failed"
             exit 1
           fi
@@ -186,7 +197,7 @@ jobs:
           docker compose \
             --env-file "$HOME/.config/schedular/.env.deploy" \
             -f infra/compose/docker-compose.deploy.yml \
-            up -d
+            up -d --wait --wait-timeout 300
           docker compose \
             --env-file "$HOME/.config/schedular/.env.deploy" \
             -f infra/compose/docker-compose.deploy.yml \
