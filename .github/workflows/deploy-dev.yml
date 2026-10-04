@@ -1,13 +1,6 @@
 name: deploy-dev
 
 on:
-  workflow_call:
-    inputs:
-      image_tag:
-        description: "Docker image tag to deploy"
-        required: true
-        type: string
-
   workflow_dispatch:
     inputs:
       image_tag:
@@ -24,6 +17,7 @@ concurrency:
 
 jobs:
   deploy:
+    environment: development
     runs-on:
       - self-hosted
       - Linux
@@ -33,6 +27,15 @@ jobs:
     timeout-minutes: 10
 
     steps:
+      - name: Validate image tag
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          if [[ ! "$IMAGE_TAG" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "image_tag must be a 40-character Git commit SHA"
+            exit 1
+          fi
+
       - name: Checkout deployed commit
         uses: actions/checkout@v7
         with:
@@ -50,7 +53,7 @@ jobs:
           fi
 
           image_tag=$(tr -d '[:space:]' < "$state_file")
-          if [[ -z "$image_tag" || ! "$image_tag" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+          if [[ ! "$image_tag" =~ ^[0-9a-fA-F]{40}$ ]]; then
             echo "Invalid last-known-good image tag in $state_file"
             exit 1
           fi

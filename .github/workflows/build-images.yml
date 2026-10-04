@@ -1,20 +1,9 @@
 name: build-images
 
 on:
-  # Final automatic path once this workflow exists on the default branch.
-  workflow_run:
-    workflows:
-      - "ci"
-    types:
-      - completed
-    branches:
-      - develop
-
-  # TEMPORARY: allows us to test build -> deploy from the feature branch.
-  # Remove this trigger after the deployment pipeline has been merged.
   push:
     branches:
-      - feat/dev-deployment
+      - develop
     paths:
       - "backend/**"
       - "frontend/**"
@@ -29,17 +18,12 @@ permissions:
   packages: write
 
 concurrency:
-  group: build-images-${{ github.event.workflow_run.head_branch || github.ref }}
+  group: build-images-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   publish:
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'push' ||
-      github.event.workflow_run.conclusion == 'success'
-
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
 
     outputs:
@@ -49,15 +33,9 @@ jobs:
       - name: Determine commit SHA
         id: commit
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          WORKFLOW_SHA: ${{ github.event.workflow_run.head_sha }}
           CURRENT_SHA: ${{ github.sha }}
         run: |
-          if [ "$EVENT_NAME" = "workflow_run" ]; then
-            echo "sha=$WORKFLOW_SHA" >> "$GITHUB_OUTPUT"
-          else
-            echo "sha=$CURRENT_SHA" >> "$GITHUB_OUTPUT"
-          fi
+          echo "sha=$CURRENT_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Checkout tested commit
         uses: actions/checkout@v7
@@ -94,7 +72,7 @@ jobs:
           images: ${{ steps.image.outputs.backend }}
           tags: |
             type=raw,value=${{ steps.commit.outputs.sha }}
-            type=raw,value=develop,enable=${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'develop' }}
+            type=raw,value=develop,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
 
       - name: Build and push backend image
         uses: docker/build-push-action@v6
@@ -116,7 +94,7 @@ jobs:
           images: ${{ steps.image.outputs.frontend }}
           tags: |
             type=raw,value=${{ steps.commit.outputs.sha }}
-            type=raw,value=develop,enable=${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'develop' }}
+            type=raw,value=develop,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
 
       - name: Build and push frontend image
         uses: docker/build-push-action@v6
@@ -129,11 +107,3 @@ jobs:
           labels: ${{ steps.frontend-meta.outputs.labels }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
-
-  deploy:
-    needs: publish
-
-    uses: ./.github/workflows/deploy-dev.yml
-
-    with:
-      image_tag: ${{ needs.publish.outputs.image_tag }}

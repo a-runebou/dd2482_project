@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   frontend-lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
       run:
@@ -26,7 +26,7 @@ jobs:
       - run: npm run format:check
 
   frontend-typecheck:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
       run:
@@ -42,7 +42,7 @@ jobs:
       - run: npm run typecheck
 
   frontend-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
       run:
@@ -58,7 +58,7 @@ jobs:
       - run: npm test
 
   frontend-build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
       run:
@@ -74,7 +74,7 @@ jobs:
       - run: npm run build
 
   frontend-api-drift:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
       run:
@@ -90,7 +90,7 @@ jobs:
       - run: npm run check:api
 
   frontend-audit:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
       run:
@@ -110,7 +110,7 @@ jobs:
         continue-on-error: true
 
   frontend-contract:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
