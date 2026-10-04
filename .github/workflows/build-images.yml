@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - develop
+      - feat/dev-deployment
     paths:
       - "backend/**"
       - "frontend/**"
@@ -23,6 +24,7 @@ concurrency:
 
 jobs:
   publish:
+    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/feat/dev-deployment'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 

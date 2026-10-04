@@ -17,6 +17,7 @@ concurrency:
 
 jobs:
   deploy:
+    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/feat/dev-deployment'
     environment: development
     runs-on:
       - self-hosted
