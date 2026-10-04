@@ -16,7 +16,60 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Validate deployment branch and image tag
+        env:
+          DEPLOY_REF: ${{ github.ref }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          case "$DEPLOY_REF" in
+            refs/heads/develop|refs/heads/feat/dev-deployment)
+              ;;
+            *)
+              echo "Deployment branch is not trusted: $DEPLOY_REF"
+              exit 1
+              ;;
+          esac
+
+          if [[ ! "$IMAGE_TAG" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "image_tag must be a 40-character Git commit SHA"
+            exit 1
+          fi
+
+      - name: Checkout trusted branch history
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Verify image commit provenance
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          TRUSTED_BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          git fetch --no-tags origin \
+            "refs/heads/$TRUSTED_BRANCH:refs/remotes/origin/$TRUSTED_BRANCH"
+
+          if ! git cat-file -e "$IMAGE_TAG^{commit}"; then
+            echo "Image commit does not exist: $IMAGE_TAG"
+            exit 1
+          fi
+
+          if ! git merge-base --is-ancestor \
+            "$IMAGE_TAG" \
+            "refs/remotes/origin/$TRUSTED_BRANCH"; then
+            echo "Image commit is not an ancestor of trusted branch $TRUSTED_BRANCH: $IMAGE_TAG"
+            exit 1
+          fi
+
   deploy:
+    needs: validate
     if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/feat/dev-deployment'
     environment: development
     runs-on:
