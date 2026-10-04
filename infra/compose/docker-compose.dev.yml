@@ -26,6 +26,12 @@ services:
       - "1025:1025"
       - "8025:8025"
 
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   migrate:
     build:
       context: ../../backend
@@ -66,7 +72,7 @@ services:
       migrate:
         condition: service_completed_successfully
       mailpit:
-        condition: service_started
+        condition: service_healthy
       worker:
         condition: service_started
 
@@ -91,6 +97,19 @@ services:
       - 0.0.0.0
       - --port
       - "8000"
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
     volumes:
       - ../../backend:/app
@@ -123,7 +142,14 @@ services:
       migrate:
         condition: service_completed_successfully
       mailpit:
-        condition: service_started
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.worker.health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
     volumes:
       - ../../backend:/app
@@ -135,7 +161,17 @@ services:
 
     depends_on:
       backend:
-        condition: service_started
+        condition: service_healthy
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q --spider http://127.0.0.1:8080/ || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
     environment:
       BACKEND_ORIGIN: http://backend:8000
