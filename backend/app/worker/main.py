@@ -24,6 +24,7 @@ def run_worker() -> None:
                 time.sleep(POLL_SECONDS)
                 continue
 
+            # Process the job
             try:
                 handle_job(db, job)
             except Exception as exc:  # noqa: BLE001

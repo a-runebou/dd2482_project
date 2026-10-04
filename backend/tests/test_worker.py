@@ -5,6 +5,7 @@ from uuid import uuid4
 from app.infra.models.job import Job
 from app.worker.health import heartbeat_is_fresh, record_heartbeat
 
+
 def test_worker_heartbeat_is_fresh_after_recording(tmp_path: Path) -> None:
     heartbeat_path = tmp_path / "heartbeat" 
     record_heartbeat(heartbeat_path)
