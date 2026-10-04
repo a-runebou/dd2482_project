@@ -36,3 +36,9 @@ jobs:
   frontend:
     uses: ./.github/workflows/frontend-ci.yml
 
+  security:
+    uses: ./.github/workflows/security.yml
+    permissions:
+      contents: read
+      security-events: write
+

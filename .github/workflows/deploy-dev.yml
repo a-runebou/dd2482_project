@@ -39,7 +39,7 @@ jobs:
           ref: ${{ inputs.image_tag }}
           fetch-depth: 1
 
-      - name: Read last known-good deployment
+      - name: Read last known good deployment
         id: known_good
         run: |
           state_file="$HOME/.config/schedular/last-known-good-image-tag"

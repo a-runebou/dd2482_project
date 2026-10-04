@@ -1,6 +1,8 @@
 name: security
 
 on:
+  workflow_call:
+
   pull_request:
     paths:
       - "frontend/**"
@@ -35,7 +37,7 @@ jobs:
           fetch-depth: 0
       - uses: gitleaks/gitleaks-action@v3
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
           GITLEAKS_ENABLE_COMMENTS: false
 
   codeql:
