@@ -1,16 +1,11 @@
 name: build-images
 
 on:
-  push:
-    branches:
-      - develop
-      - feat/dev-deployment
-    paths:
-      - "backend/**"
-      - "frontend/**"
-      - "contracts/**"
-      - "infra/compose/**"
-      - ".github/workflows/**"
+  workflow_call:
+    outputs:
+      image_tag:
+        description: "Commit SHA used for the published images"
+        value: ${{ jobs.publish.outputs.image_tag }}
 
   workflow_dispatch:
 
@@ -24,7 +19,7 @@ concurrency:
 
 jobs:
   publish:
-    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/feat/dev-deployment'
+    if: github.ref == 'refs/heads/develop'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 

@@ -1,6 +1,12 @@
 name: deploy-dev
 
 on:
+  workflow_call:
+    inputs:
+      image_tag:
+        description: "Docker image tag to deploy"
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       image_tag:
@@ -27,7 +33,7 @@ jobs:
           IMAGE_TAG: ${{ inputs.image_tag }}
         run: |
           case "$DEPLOY_REF" in
-            refs/heads/develop|refs/heads/feat/dev-deployment)
+            refs/heads/develop)
               ;;
             *)
               echo "Deployment branch is not trusted: $DEPLOY_REF"
@@ -70,7 +76,7 @@ jobs:
 
   deploy:
     needs: validate
-    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/feat/dev-deployment'
+    if: github.ref == 'refs/heads/develop'
     environment: development
     runs-on:
       - self-hosted
